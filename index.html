@@ -343,15 +343,13 @@
   <script>
     // ========== STATE & CONFIG ==========
     const CONFIG = {
-      DEBOUNCE_DELAY: 300,
       MIN_QUERY_LENGTH: 2
     };
 
     const STATE = {
       currentQuery: '',
       selectedType: 'all',
-      results: [],
-      debounceTimer: null
+      results: []
     };
 
     // ========== DOM ELEMENTS ==========
@@ -485,15 +483,7 @@
     function setupEventListeners() {
       DOM.searchForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        clearTimeout(STATE.debounceTimer);
         searchMovies(DOM.searchInput.value);
-      });
-
-      DOM.searchInput.addEventListener('input', (e) => {
-        clearTimeout(STATE.debounceTimer);
-        STATE.debounceTimer = setTimeout(() => {
-          searchMovies(e.target.value);
-        }, CONFIG.DEBOUNCE_DELAY);
       });
 
       document.addEventListener('keydown', (e) => {
