@@ -164,13 +164,22 @@ function setupHls(m3u8Url, video, subtitles = []) {
       })
 
       const proxiedUrl = proxyUrl(m3u8Url)
+      console.log('[setupHls] loading proxied URL:', proxiedUrl.slice(0, 100))
       hls.loadSource(proxiedUrl)
       hls.attachMedia(video)
 
       currentHls = hls
 
+      // Hard timeout — if manifest never parses within 20s, give up
+      const timeout = setTimeout(() => {
+        console.error('[setupHls] manifest parse timeout')
+        hls.destroy()
+        reject(new Error('Timed out waiting for stream manifest'))
+      }, 20000)
+
       // When manifest is parsed, setup quality levels
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        clearTimeout(timeout)
         renderQualityBar(hls.levels)
         renderSubtitleSelector(subtitles, video)
         video.play()
@@ -185,9 +194,12 @@ function setupHls(m3u8Url, video, subtitles = []) {
 
       // Handle errors
       hls.on(Hls.Events.ERROR, (event, data) => {
+        console.warn('HLS error:', data.type, data.details, 'fatal:', data.fatal)
         if (data.fatal) {
           console.error('Fatal HLS error:', data)
+          clearTimeout(timeout)
           showError('Playback error: ' + data.details)
+          hideLoading()
           hls.destroy()
           reject(new Error('HLS error: ' + data.details))
         }
@@ -299,15 +311,16 @@ function renderSubtitleSelector(subtitles, video) {
 async function resolveAndPlay(mediaId, dataId, type) {
   showLoading()
   try {
-    const response = await fetch(
-      `/api/resolve?mediaId=${mediaId}&dataId=${dataId}&type=${type}`
-    )
+    const url = `/api/resolve?mediaId=${mediaId}&dataId=${dataId}&type=${type}`
+    console.log('[resolveAndPlay] fetching:', url)
+
+    const response = await fetch(url)
+    const data = await response.json()
+    console.log('[resolveAndPlay] response:', data)
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
+      throw new Error(data.error || `API error: ${response.status}`)
     }
-
-    const data = await response.json()
 
     if (!data.sources || !data.sources.length) {
       throw new Error('No video sources available')
@@ -316,6 +329,12 @@ async function resolveAndPlay(mediaId, dataId, type) {
     // Find HLS source (or use first source)
     const source = data.sources.find(s => s.hls) || data.sources[0]
     const m3u8Url = source.url
+
+    if (!m3u8Url) {
+      throw new Error('Empty stream URL returned from resolve')
+    }
+
+    console.log('[resolveAndPlay] m3u8Url:', m3u8Url.slice(0, 80))
 
     currentMediaId = mediaId
     currentDataId = dataId
@@ -337,7 +356,7 @@ async function resolveAndPlay(mediaId, dataId, type) {
     }
 
   } catch (error) {
-    console.error('Resolve and play error:', error)
+    console.error('[resolveAndPlay] error:', error)
     showError('Failed to load video: ' + error.message)
     hideLoading()
   }
@@ -513,11 +532,12 @@ async function initPage() {
 
   // Load based on type
   if (params.type === 'tv') {
-    // For TV: show season/episode selection
+    // For TV: show season/episode selection, then hide loader (user picks an episode)
     const tvControls = document.getElementById('tv-controls')
-    if (tvControls) tvControls.style.display = 'block'
-    
+    if (tvControls) tvControls.style.display = 'flex'
+
     await loadSeasons(numericId)
+    hideLoading()
   } else if (params.type === 'movie') {
     // For movies: auto-play immediately
     await resolveAndPlay(numericId, numericId, 'movie')

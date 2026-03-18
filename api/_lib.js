@@ -9,8 +9,8 @@
 // ============================================================================
 
 const FLIXHQ_BASE = 'https://flixhq.to'
-const DECRYPT_PRIMARY = 'https://dec.eatmynerds.live'
-const DECRYPT_FALLBACK = 'https://decrypt.broggl.farm'
+const DECRYPT_PRIMARY = 'https://decrypt.broggl.farm'
+const DECRYPT_FALLBACK = 'https://dec.eatmynerds.live'
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
 
@@ -466,14 +466,22 @@ async function resolve(mediaId, dataId, type) {
   // Decrypt embed
   const decrypted = await decryptEmbed(embedLink, mediaId)
 
+  // Handle both response shapes:
+  // broggl.farm: { sources: [{file}], tracks: [{file, label}] }
+  // eatmynerds:  { file, subtitles: [{file, label}] }
+  const m3u8Url =
+    decrypted.file ||
+    (Array.isArray(decrypted.sources) && decrypted.sources[0]?.file) ||
+    ''
+
+  const subtitles =
+    decrypted.subtitles ||
+    decrypted.tracks ||
+    []
+
   return {
-    sources: [
-      {
-        url: decrypted.file || '',
-        hls: true
-      }
-    ],
-    subtitles: decrypted.subtitles || []
+    sources: [{ url: m3u8Url, hls: true }],
+    subtitles
   }
 }
 
