@@ -3,18 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎬 mov-web</title>
-  <meta name="description" content="Stream movies and TV shows in your browser — lightweight, no sign-up required.">
+  <title>🎬 mov-web - Search</title>
+  <meta name="description" content="Search and stream movies and TV shows · Lightweight · No sign-up required.">
 
-  <!-- Pico CSS -->
+  <!-- Pico CSS (classless, CDN) -->
   <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css"></noscript>
 
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <!-- HLS.js for m3u8 streaming -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- Font Awesome (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <!-- Dynamic Favicon -->
   <script>
@@ -34,20 +31,26 @@
 
   <style>
     :root {
+      --accent: #e50914;
+      --accent-hover: #cc0000;
+      --accent-light: #fff0f0;
       --pico-font-size: 16px;
-      --mov-accent: #ff0000;
-      --mov-accent-hover: #cc0000;
-      --mov-accent-light: #fff0f0;
     }
 
     html[data-theme="dark"] {
-      --mov-accent-light: #2a0000;
+      --accent-light: #2a0000;
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
       display: flex;
       flex-direction: column;
       min-height: 100vh;
+      margin: 0;
+      padding: 0;
     }
 
     body > main {
@@ -55,24 +58,65 @@
       max-width: 1200px;
       width: 100%;
       margin: 0 auto;
-      padding-inline: 1rem;
+      padding: 1.5rem;
+      padding-top: 1rem;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .header-left {
+      flex: 1;
+      min-width: 0;
     }
 
     h1 {
-      margin-bottom: 0.5rem;
+      margin: 0 0 0.25rem 0;
       font-size: 2rem;
     }
 
     .subtitle {
       opacity: 0.7;
-      margin-bottom: 1.5rem;
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    #theme-toggle {
+      background: none;
+      border: 1px solid var(--pico-form-element-border-color);
+      width: 2.5rem;
+      height: 2.5rem;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 0.25rem;
+      transition: all 0.2s;
+    }
+
+    #theme-toggle:hover {
+      background: var(--pico-form-element-background-color);
     }
 
     /* ── Search Section ── */
     .search-section {
       display: flex;
-      gap: 0.5rem;
-      margin-bottom: 2rem;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
     }
 
     #search-input {
@@ -80,30 +124,73 @@
       min-width: 0;
     }
 
-    #search-input::placeholder {
-      color: var(--pico-form-element-placeholder-color);
+    #search-btn {
+      flex: 0 0 auto;
+      width: 2.75rem;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Filter Toggle ── */
+    .filter-section {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .filter-btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid var(--pico-form-element-border-color);
+      background: var(--pico-form-element-background-color);
+      color: var(--pico-form-element-color);
+      cursor: pointer;
+      border-radius: 0.25rem;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      background: var(--pico-card-background-color);
+    }
+
+    .filter-btn.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
     }
 
     /* ── Results Grid ── */
     #results {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 1rem;
-      margin-bottom: 2rem;
+      margin-bottom: 3rem;
     }
 
     .result-card {
       cursor: pointer;
       border-radius: 0.5rem;
       overflow: hidden;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: all 0.2s ease;
       background: var(--pico-card-background-color);
       border: 1px solid var(--pico-card-border-color);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
     }
 
     .result-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
     }
 
     .result-card img {
@@ -113,352 +200,209 @@
       background: var(--pico-form-element-background-color);
     }
 
-    .result-card-info {
+    .card-info {
       padding: 0.75rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
-    .result-card-title {
+    .card-title {
       font-size: 0.9rem;
       font-weight: 600;
-      margin: 0 0 0.25rem 0;
+      margin: 0 0 0.35rem 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      flex: 1;
     }
 
-    .result-card-meta {
+    .card-meta {
       font-size: 0.75rem;
       opacity: 0.7;
       display: flex;
       gap: 0.5rem;
+      align-items: center;
       justify-content: space-between;
     }
 
-    .result-card-type {
+    .badge {
       display: inline-block;
-      background: var(--mov-accent-light);
-      color: var(--mov-accent);
-      padding: 0.1rem 0.4rem;
-      border-radius: 0.25rem;
-      font-weight: 600;
-      font-size: 0.7rem;
+      padding: 0.1rem 0.5rem;
+      border-radius: 0.2rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge.movie {
+      background: rgba(30, 144, 255, 0.2);
+      color: #1e90ff;
+    }
+
+    .badge.tv {
+      background: rgba(255, 140, 0, 0.2);
+      color: #ff8c00;
     }
 
     /* ── Loading State ── */
-    .loading {
+    #loading {
       display: none;
       text-align: center;
       padding: 2rem;
       opacity: 0.7;
     }
 
-    .loading.active {
+    #loading.active {
       display: block;
     }
 
-    /* ── Modal ── */
-    dialog {
-      border-radius: 0.5rem;
-      max-width: 90vw;
-      max-height: 90vh;
-      width: 700px;
-      overflow-y: auto;
-    }
-
-    dialog::backdrop {
-      background-color: rgba(0, 0, 0, 0.5);
-    }
-
-    .modal-header {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-
-    .modal-poster {
-      width: 150px;
-      height: 225px;
-      flex-shrink: 0;
-      border-radius: 0.5rem;
-      overflow: hidden;
-      background: var(--pico-form-element-background-color);
-    }
-
-    .modal-poster img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .modal-content {
-      flex: 1;
-    }
-
-    .modal-title {
-      margin: 0 0 0.5rem 0;
+    .spinner {
       font-size: 1.5rem;
+      animation: spin 1s linear infinite;
     }
 
-    .modal-meta {
-      display: flex;
-      gap: 1rem;
-      opacity: 0.7;
-      font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-
-    .modal-description {
-      line-height: 1.6;
-      margin-bottom: 1rem;
-      font-size: 0.95rem;
-    }
-
-    .modal-description.truncated {
-      max-height: 100px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    /* ── TV Show Selectors ── */
-    .tv-section {
-      display: none;
-      margin-bottom: 1rem;
-    }
-
-    .tv-section.active {
-      display: block;
-    }
-
-    .selector-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-    }
-
-    .selector-group label {
-      font-weight: 600;
-      font-size: 0.9rem;
-    }
-
-    .selector-group select,
-    .selector-group input {
-      width: 100%;
-    }
-
-    /* ── Episode List ── */
-    .episode-list {
-      display: none;
-      max-height: 300px;
-      overflow-y: auto;
-      border: 1px solid var(--pico-form-element-border-color);
-      border-radius: 0.25rem;
-      margin-bottom: 1rem;
-    }
-
-    .episode-list.active {
-      display: block;
-    }
-
-    .episode-item {
-      padding: 0.75rem;
-      border-bottom: 1px solid var(--pico-form-element-border-color);
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .episode-item:hover {
-      background: var(--mov-accent-light);
-    }
-
-    .episode-item.selected {
-      background: var(--mov-accent-light);
-      font-weight: 600;
-    }
-
-    /* ── Action Buttons ── */
-    .modal-actions {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 1rem;
-    }
-
-    .modal-actions button {
-      flex: 1;
-    }
-
-    .modal-actions button:last-child {
-      background-color: #ddd;
-      color: #333;
-    }
-
-    /* ── Video Player ── */
-    #player-container {
-      display: none;
-      margin-bottom: 2rem;
-    }
-
-    #player-container.active {
-      display: block;
-    }
-
-    #video {
-      width: 100%;
-      height: auto;
-      background: #000;
-      border-radius: 0.5rem;
-    }
-
-    .player-controls {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .player-controls button {
-      flex: 1;
-      min-width: 120px;
-    }
-
-    /* ── FAB Menu ── */
-    #fab-menu {
-      position: fixed;
-      bottom: 1rem;
-      right: 1rem;
-      z-index: 999;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 0.5rem;
-    }
-
-    #fab-toggle {
-      --pico-color: var(--pico-form-element-color);
-      --pico-background-color: var(--pico-form-element-background-color);
-      --pico-border-color: var(--pico-form-element-border-color);
-      width: 3rem;
-      height: 3rem;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      padding: 0;
-      transition: background 0.2s, transform 0.2s;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      border: 1px solid var(--pico-card-border-color);
-    }
-
-    #fab-toggle:hover {
-      transform: scale(1.1);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-    }
-
-    #fab-items {
-      display: none;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    #fab-menu.open #fab-items {
-      display: flex;
-      animation: fab-reveal 0.2s ease;
-    }
-
-    @keyframes fab-reveal {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
+    @keyframes spin {
       to {
-        opacity: 1;
-        transform: translateY(0);
+        transform: rotate(360deg);
       }
-    }
-
-    #fab-menu #fab-items button {
-      --pico-color: var(--pico-form-element-color);
-      --pico-background-color: var(--pico-form-element-background-color);
-      --pico-border-color: var(--pico-form-element-border-color);
-      width: 3rem;
-      height: 3rem;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.2rem;
-      padding: 0;
-      transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      border: 1px solid var(--pico-card-border-color);
-      position: relative;
-    }
-
-    #fab-menu #fab-items button:hover {
-      transform: scale(1.05);
-    }
-
-    #fab-menu #fab-items button::after {
-      content: attr(aria-label);
-      position: absolute;
-      right: calc(100% + 12px);
-      top: 50%;
-      transform: translateY(-50%) scale(0.9);
-      opacity: 0;
-      pointer-events: none;
-      background: var(--pico-color);
-      color: var(--pico-background-color);
-      padding: 0.4rem 0.8rem;
-      border-radius: 0.25rem;
-      font-size: 0.85rem;
-      font-weight: 500;
-      white-space: nowrap;
-      transition: opacity 0.2s;
-    }
-
-    #fab-menu #fab-items button:hover::after {
-      opacity: 1;
     }
 
     /* ── Empty State ── */
-    .empty-state {
+    #empty-state {
+      display: none;
       text-align: center;
       padding: 3rem 1rem;
       opacity: 0.6;
     }
 
+    #empty-state.active {
+      display: block;
+    }
+
+    #empty-state p {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    /* ── Recently Watched ── */
+    .recently-watched-section {
+      display: none;
+      margin-bottom: 2rem;
+    }
+
+    .recently-watched-section.active {
+      display: block;
+    }
+
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      opacity: 0.8;
+      margin: 0 0 0.75rem 0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #recently-watched {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .recent-item {
+      cursor: pointer;
+      border-radius: 0.35rem;
+      overflow: hidden;
+      transition: all 0.2s;
+      border: 1px solid var(--pico-card-border-color);
+    }
+
+    .recent-item:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .recent-item img {
+      width: 100%;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      opacity: 0.6;
+      font-size: 0.85rem;
+    }
+
     /* ── Responsive Design ── */
     @media (max-width: 768px) {
+      body > main {
+        padding: 1rem;
+        padding-top: 0.75rem;
+      }
+
+      header {
+        margin-bottom: 1rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .subtitle {
+        font-size: 0.85rem;
+      }
+
+      .search-section {
+        margin-bottom: 1rem;
+      }
+
+      .filter-section {
+        margin-bottom: 1rem;
+      }
+
       #results {
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 0.75rem;
       }
 
-      dialog {
-        width: 95vw;
-        max-height: 95vh;
+      .card-info {
+        padding: 0.5rem;
       }
 
-      .modal-header {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
+      .card-title {
+        font-size: 0.8rem;
       }
 
-      .modal-poster {
-        width: 120px;
-        height: 180px;
+      .card-meta {
+        font-size: 0.7rem;
       }
 
-      .modal-actions {
-        flex-direction: column;
+      #recently-watched {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 0.5rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      body > main {
+        padding: 0.75rem;
       }
 
-      #fab-menu {
-        bottom: 1rem;
-        right: 0.5rem;
+      h1 {
+        font-size: 1.25rem;
+      }
+
+      #results {
+        grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+      }
+
+      #recently-watched {
+        grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
       }
     }
   </style>
@@ -468,8 +412,15 @@
   <main>
     <!-- Header -->
     <header>
-      <h1>🎬 mov-web</h1>
-      <p class="subtitle">Stream movies & TV shows · Lightweight · No sign-up</p>
+      <div class="header-left">
+        <h1>🎬 mov-web</h1>
+        <p class="subtitle">Search movies & TV shows · Stream instantly · No sign-up</p>
+      </div>
+      <div class="header-right">
+        <button id="theme-toggle" aria-label="Toggle theme">
+          <i class="fas fa-moon"></i>
+        </button>
+      </div>
     </header>
 
     <!-- Search Section -->
@@ -479,152 +430,346 @@
         id="search-input" 
         placeholder="Search movies, TV shows..."
         autocomplete="off"
+        spellcheck="false"
       >
       <button id="search-btn" aria-label="Search">
         <i class="fas fa-search"></i>
       </button>
     </section>
 
+    <!-- Filter Toggles -->
+    <section class="filter-section">
+      <div class="filter-group">
+        <button class="filter-btn active" data-type="all">All</button>
+        <button class="filter-btn" data-type="movie">Movies</button>
+        <button class="filter-btn" data-type="tv">TV Shows</button>
+      </div>
+    </section>
+
+    <!-- Recently Watched -->
+    <section id="recently-watched-section" class="recently-watched-section">
+      <h3 class="section-title">Recently Watched</h3>
+      <div id="recently-watched"></div>
+    </section>
+
     <!-- Loading Spinner -->
     <div id="loading" class="loading">
-      <i class="fas fa-spinner fa-spin"></i> Searching...
+      <div class="spinner">
+        <i class="fas fa-spinner fa-spin"></i>
+      </div>
+      <p>Searching...</p>
     </div>
 
     <!-- Results Grid -->
     <section id="results"></section>
 
     <!-- Empty State -->
-    <div id="empty-state" class="empty-state" style="display: none;">
-      <p>Start typing to search for movies and TV shows</p>
+    <div id="empty-state" class="empty-state">
+      <p>
+        <i class="fas fa-search"></i> Start typing to search for movies and TV shows
+      </p>
     </div>
-
-    <!-- Video Player -->
-    <section id="player-container">
-      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-        <button id="player-back" style="flex: 0 0 auto;">
-          <i class="fas fa-arrow-left"></i> Back
-        </button>
-        <h2 id="player-title" style="flex: 1; margin: 0; display: flex; align-items: center;"></h2>
-      </div>
-      <video 
-        id="video" 
-        controls 
-        style="width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 0.5rem;"
-      ></video>
-      <div class="player-controls">
-        <select id="quality-select">
-          <option value="">Quality</option>
-          <option value="1080">1080p</option>
-          <option value="720">720p</option>
-          <option value="480">480p</option>
-          <option value="360">360p</option>
-        </select>
-        <select id="subtitles-select">
-          <option value="">Subtitles</option>
-        </select>
-        <button id="fullscreen-btn">
-          <i class="fas fa-expand"></i> Fullscreen
-        </button>
-      </div>
-    </section>
   </main>
 
-  <!-- Media Details Modal -->
-  <dialog id="media-modal">
-    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-      <h2 id="modal-title" style="margin: 0;"></h2>
-      <button 
-        id="modal-close" 
-        style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0;"
-        aria-label="Close"
-      >
-        &times;
-      </button>
-    </div>
+  <!-- Footer -->
+  <footer>
+    <p>🎬 mov-web © 2024 · Stream movies and TV shows instantly</p>
+  </footer>
 
-    <div class="modal-header">
-      <div class="modal-poster">
-        <img id="modal-poster" alt="Poster" style="width: 100%; height: 100%; object-fit: cover;">
-      </div>
-      <div class="modal-content">
-        <h2 class="modal-title" id="media-title"></h2>
-        <div class="modal-meta">
-          <span id="media-year"></span>
-          <span id="media-type"></span>
-          <span id="media-rating"></span>
-        </div>
-        <div class="modal-description" id="media-description"></div>
-      </div>
-    </div>
+  <script>
+    // ========== STATE & CONFIG ==========
+    const CONFIG = {
+      DEBOUNCE_DELAY: 300,
+      MIN_QUERY_LENGTH: 2
+    };
 
-    <!-- TV Show Specific Section -->
-    <div class="tv-section" id="tv-section">
-      <div class="selector-group">
-        <label for="season-select">Season</label>
-        <select id="season-select"></select>
-      </div>
-      <div class="selector-group">
-        <label for="episode-select">Episode</label>
-        <div class="episode-list" id="episode-list"></div>
-      </div>
-    </div>
+    const STATE = {
+      currentQuery: '',
+      selectedType: 'all',
+      results: [],
+      debounceTimer: null
+    };
 
-    <!-- Server & Quality Selection -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-      <div class="selector-group">
-        <label for="server-select">Server</label>
-        <select id="server-select"></select>
-      </div>
-      <div class="selector-group">
-        <label for="quality-modal-select">Quality</label>
-        <select id="quality-modal-select">
-          <option value="1080">1080p (default)</option>
-          <option value="720">720p</option>
-          <option value="480">480p</option>
-          <option value="360">360p</option>
-        </select>
-      </div>
-    </div>
+    // ========== DOM ELEMENTS ==========
+    const DOM = {
+      searchInput: document.getElementById('search-input'),
+      searchBtn: document.getElementById('search-btn'),
+      filterBtns: document.querySelectorAll('.filter-btn'),
+      results: document.getElementById('results'),
+      loading: document.getElementById('loading'),
+      emptyState: document.getElementById('empty-state'),
+      themeToggle: document.getElementById('theme-toggle'),
+      recentlyWatchedSection: document.getElementById('recently-watched-section'),
+      recentlyWatchedContainer: document.getElementById('recently-watched'),
+      html: document.documentElement
+    };
 
-    <!-- Subtitle Selection -->
-    <div class="selector-group">
-      <label for="subtitles-modal-select">Subtitles</label>
-      <select id="subtitles-modal-select"></select>
-    </div>
+    // ========== THEME MANAGEMENT ==========
+    function initTheme() {
+      const savedTheme = localStorage.getItem('mov-web-theme') || 'light';
+      DOM.html.setAttribute('data-theme', savedTheme);
+      updateThemeIcon();
+    }
 
-    <!-- Action Buttons -->
-    <div class="modal-actions">
-      <button id="modal-play" style="background-color: var(--mov-accent); color: white;">
-        <i class="fas fa-play"></i> Play
-      </button>
-      <button id="modal-cancel">Cancel</button>
-    </div>
-  </dialog>
+    function updateThemeIcon() {
+      const theme = DOM.html.getAttribute('data-theme');
+      const icon = theme === 'dark' ? 'fa-sun' : 'fa-moon';
+      DOM.themeToggle.innerHTML = `<i class="fas ${icon}"></i>`;
+    }
 
-  <!-- FAB Menu -->
-  <div id="fab-menu">
-    <button id="fab-toggle" aria-label="Menu">
-      <i class="fas fa-ellipsis-v"></i>
-    </button>
-    <div id="fab-items">
-      <button id="theme-toggle" aria-label="Toggle theme">
-        <i class="fas fa-moon"></i>
-      </button>
-      <button id="history-btn" aria-label="Watch history">
-        <i class="fas fa-history"></i>
-      </button>
-      <button id="favorites-btn" aria-label="Favorites">
-        <i class="fas fa-star"></i>
-      </button>
-      <button id="settings-btn" aria-label="Settings">
-        <i class="fas fa-cog"></i>
-      </button>
-      <button id="about-btn" aria-label="About">
-        <i class="fas fa-circle-info"></i>
-      </button>
-    </div>
-  </div>
+    function toggleTheme() {
+      const currentTheme = DOM.html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      DOM.html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('mov-web-theme', newTheme);
+      updateThemeIcon();
+    }
 
-  <script src="/anilist.js"></script>
+    // ========== WATCH HISTORY ==========
+    function saveToHistory(id, type, title, image) {
+      try {
+        const history = JSON.parse(localStorage.getItem('mov-web-history') || '[]');
+        const newItem = { id, type, title, image, timestamp: Date.now() };
+        
+        // Remove duplicate
+        const filtered = history.filter(item => item.id !== id);
+        
+        // Keep only 10 most recent
+        const updated = [newItem, ...filtered].slice(0, 10);
+        localStorage.setItem('mov-web-history', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving to history:', e);
+      }
+    }
+
+    function loadRecentlyWatched() {
+      try {
+        const history = JSON.parse(localStorage.getItem('mov-web-history') || '[]');
+        if (history.length === 0) {
+          DOM.recentlyWatchedSection.classList.remove('active');
+          return;
+        }
+
+        DOM.recentlyWatchedContainer.innerHTML = '';
+        history.forEach(item => {
+          const el = createRecentItem(item);
+          DOM.recentlyWatchedContainer.appendChild(el);
+        });
+        DOM.recentlyWatchedSection.classList.add('active');
+      } catch (e) {
+        console.error('Error loading history:', e);
+      }
+    }
+
+    function createRecentItem(item) {
+      const div = document.createElement('div');
+      div.className = 'recent-item';
+      div.title = item.title;
+      div.onclick = () => openWatch(item.id, item.type, item.title);
+      
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = item.title;
+      img.loading = 'lazy';
+      
+      div.appendChild(img);
+      return div;
+    }
+
+    // ========== API CALLS ==========
+    async function searchMovies(query) {
+      if (query.trim().length < CONFIG.MIN_QUERY_LENGTH) {
+        clearResults();
+        DOM.emptyState.classList.add('active');
+        return;
+      }
+
+      STATE.currentQuery = query.trim();
+      showLoading(true);
+      DOM.emptyState.classList.remove('active');
+
+      try {
+        const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        STATE.results = data || [];
+        
+        // Apply filter and display
+        displayResults(filterResults(STATE.results));
+      } catch (error) {
+        console.error('Search error:', error);
+        showError('Failed to search. Please try again.');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ========== FILTERING & DISPLAY ==========
+    function filterResults(items) {
+      if (STATE.selectedType === 'all') {
+        return items;
+      }
+      return items.filter(item => item.type === STATE.selectedType);
+    }
+
+    function displayResults(items) {
+      DOM.results.innerHTML = '';
+
+      if (items.length === 0) {
+        DOM.emptyState.innerHTML = '<p><i class="fas fa-inbox"></i> No results found</p>';
+        DOM.emptyState.classList.add('active');
+        return;
+      }
+
+      items.forEach(item => {
+        const card = createResultCard(item);
+        DOM.results.appendChild(card);
+      });
+    }
+
+    function createResultCard(item) {
+      const div = document.createElement('div');
+      div.className = 'result-card';
+      div.onclick = () => openWatch(item.id, item.type, item.title, item.image);
+
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = item.title;
+      img.loading = 'lazy';
+
+      const info = document.createElement('div');
+      info.className = 'card-info';
+
+      const title = document.createElement('div');
+      title.className = 'card-title';
+      title.textContent = item.title;
+
+      const meta = document.createElement('div');
+      meta.className = 'card-meta';
+
+      const year = document.createElement('span');
+      year.textContent = item.year || '—';
+
+      const badge = document.createElement('span');
+      badge.className = `badge ${item.type}`;
+      badge.textContent = item.type === 'movie' ? 'Movie' : 'TV';
+
+      meta.appendChild(year);
+      meta.appendChild(badge);
+
+      info.appendChild(title);
+      info.appendChild(meta);
+
+      div.appendChild(img);
+      div.appendChild(info);
+
+      return div;
+    }
+
+    function clearResults() {
+      DOM.results.innerHTML = '';
+      STATE.results = [];
+      DOM.emptyState.classList.add('active');
+    }
+
+    function showLoading(show) {
+      if (show) {
+        DOM.loading.classList.add('active');
+      } else {
+        DOM.loading.classList.remove('active');
+      }
+    }
+
+    function showError(message) {
+      DOM.emptyState.innerHTML = `<p><i class="fas fa-exclamation-circle"></i> ${message}</p>`;
+      DOM.emptyState.classList.add('active');
+    }
+
+    // ========== NAVIGATION ==========
+    function openWatch(id, type, title, image) {
+      saveToHistory(id, type, title, image);
+      const params = new URLSearchParams({
+        id,
+        type,
+        title
+      });
+      window.location.href = `/watch.html?${params.toString()}`;
+    }
+
+    // ========== EVENT LISTENERS ==========
+    function setupEventListeners() {
+      // Search input with debounce
+      DOM.searchInput.addEventListener('input', (e) => {
+        clearTimeout(STATE.debounceTimer);
+        STATE.debounceTimer = setTimeout(() => {
+          searchMovies(e.target.value);
+        }, CONFIG.DEBOUNCE_DELAY);
+      });
+
+      // Search button
+      DOM.searchBtn.addEventListener('click', () => {
+        clearTimeout(STATE.debounceTimer);
+        searchMovies(DOM.searchInput.value);
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && document.activeElement === DOM.searchInput) {
+          clearTimeout(STATE.debounceTimer);
+          searchMovies(DOM.searchInput.value);
+        }
+        if (e.key === 'Escape') {
+          DOM.searchInput.value = '';
+          clearResults();
+          DOM.emptyState.classList.add('active');
+          STATE.currentQuery = '';
+        }
+      });
+
+      // Filter buttons
+      DOM.filterBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          DOM.filterBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          STATE.selectedType = btn.dataset.type;
+          
+          // Re-apply filter to current results
+          if (STATE.results.length > 0) {
+            displayResults(filterResults(STATE.results));
+          }
+        });
+      });
+
+      // Theme toggle
+      DOM.themeToggle.addEventListener('click', toggleTheme);
+
+      // Focus search input on page load
+      DOM.searchInput.focus();
+    }
+
+    // ========== INITIALIZATION ==========
+    function init() {
+      initTheme();
+      setupEventListeners();
+      loadRecentlyWatched();
+      showEmptyState();
+    }
+
+    function showEmptyState() {
+      DOM.emptyState.innerHTML = '<p><i class="fas fa-search"></i> Start typing to search for movies and TV shows</p>';
+      DOM.emptyState.classList.add('active');
+    }
+
+    // Start on DOM ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
 </body>
 </html>

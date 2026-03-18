@@ -8,53 +8,98 @@ const path = require('node:path')
 // CONFIGURATION
 // ============================================================================
 
-require('dotenv').config()
-
-const PORT = process.env.PORT || 9002
+const PORT = process.env.PORT || 9001
 const NODE_ENV = process.env.NODE_ENV || 'development'
 
-const FLIXHQ_BASE = process.env.FLIXHQ_BASE || 'flixhq.to'
-const FLIXHQ_API = `https://api.${FLIXHQ_BASE}`
-
-const DECRYPTION_API_PRIMARY = process.env.DECRYPTION_API_PRIMARY || 'https://dec.eatmynerds.live'
-const DECRYPTION_API_FALLBACK = process.env.DECRYPTION_API_FALLBACK || 'https://decrypt.broggl.farm'
-
-const HTTP_TIMEOUT = parseInt(process.env.HTTP_TIMEOUT || '8000')
-const DECRYPTION_TIMEOUT = parseInt(process.env.DECRYPTION_TIMEOUT || '5000')
+const FLIXHQ_BASE = 'https://flixhq.to'
+const DECRYPT_PRIMARY = 'https://dec.eatmynerds.live'
+const DECRYPT_FALLBACK = 'https://decrypt.broggl.farm'
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
-const REFERER = `https://${FLIXHQ_BASE}`
+const FLIXHQ_HEADERS = {
+  'User-Agent': USER_AGENT,
+  'Referer': 'https://flixhq.to'
+}
+
+const AJAX_HEADERS = {
+  ...FLIXHQ_HEADERS,
+  'X-Requested-With': 'XMLHttpRequest'
+}
 
 // ============================================================================
 // UTILITIES
 // ============================================================================
 
 function log(message, data = '') {
-  if (process.env.LOG_REQUESTS !== 'false') {
-    const timestamp = new Date().toISOString()
-    console.log(`[${timestamp}] ${message}`, data)
-  }
+  const timestamp = new Date().toISOString()
+  console.log(`[${timestamp}] ${message}`, data)
 }
 
-function httpsGet(url, headers = {}, timeoutMs = HTTP_TIMEOUT) {
+function httpsGet(urlStr, headers = {}, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     let redirectCount = 0
     const maxRedirects = 5
 
-    function get(urlStr) {
+    function get(url) {
       if (redirectCount >= maxRedirects) {
         return reject(new Error('Too many redirects'))
       }
 
-      const req = https.get(urlStr, { headers }, (res) => {
-        let data = ''
+      let req
+      try {
+        req = https.get(url, { headers }, (res) => {
+          let data = ''
 
-        // Handle redirects
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          redirectCount++
-          return get(res.headers.location)
-        }
+          // Handle redirects
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            redirectCount++
+            return get(res.headers.location)
+          }
 
+          if (res.statusCode !== 200) {
+            res.resume()
+            return reject(new Error(`HTTP ${res.statusCode}`))
+          }
+
+          res.on('data', (chunk) => {
+            data += chunk
+          })
+
+          res.on('end', () => {
+            resolve(data)
+          })
+        })
+
+        req.on('error', reject)
+        req.setTimeout(timeoutMs, () => {
+          req.destroy(new Error(`Timeout after ${timeoutMs}ms`))
+        })
+      } catch (e) {
+        reject(e)
+      }
+    }
+
+    get(urlStr)
+  })
+}
+
+function httpsPost(urlStr, payload, headers = {}, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    try {
+      const url = new URL(urlStr)
+      const req = https.request(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          ...headers
+        },
+        timeout: timeoutMs
+      })
+
+      let data = ''
+
+      req.on('response', (res) => {
         if (res.statusCode !== 200) {
           res.resume()
           return reject(new Error(`HTTP ${res.statusCode}`))
@@ -67,122 +112,133 @@ function httpsGet(url, headers = {}, timeoutMs = HTTP_TIMEOUT) {
         res.on('end', () => {
           resolve(data)
         })
-      }).on('error', reject)
+      })
 
-      req.setTimeout(timeoutMs, () => {
+      req.on('error', reject)
+      req.on('timeout', () => {
         req.destroy(new Error(`Timeout after ${timeoutMs}ms`))
       })
-    }
 
-    get(url)
+      req.write(payload)
+      req.end()
+    } catch (e) {
+      reject(e)
+    }
   })
 }
 
 // ============================================================================
-// HTML/JSON PARSING FUNCTIONS
+// HTML PARSING FUNCTIONS
 // ============================================================================
 
 /**
  * Parse search results HTML from FlixHQ
- * Extracts: img[data-src], href="/movie/...", title attr, year
+ * Looks for links with /movie/watch-* or /tv/watch-* paths
  */
 function parseSearchHTML(html) {
   const results = []
-  
-  // Match movie/show cards: class="fdi-item"
-  const cardRegex = /<div[^>]*class="[^"]*fdi-item[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>/g
-  const cards = html.match(cardRegex) || []
 
-  cards.forEach((card) => {
+  // Find all links with /movie/watch-* or /tv/watch-* paths
+  // More flexible pattern that works with various HTML structures
+  const linkRegex = /href="\/((tv|movie)\/watch-[^"]*-(\d+))"[^>]*(?:title|aria-label)="([^"]*)"/g
+  let match
+
+  while ((match = linkRegex.exec(html)) !== null) {
     try {
-      // Extract href and title
-      const linkMatch = card.match(/<a[^>]*href="\/(?:movie|tv)\/([^"]+)"[^>]*>/)
-      if (!linkMatch) return
+      const fullId = match[1]
+      const type = match[2] === 'tv' ? 'tv' : 'movie'
+      const numericId = match[3]
+      const title = match[4]
 
-      const id = linkMatch[1]
-      const isMovie = card.includes('/movie/')
-      const type = isMovie ? 'movie' : 'tv'
+      // Find the film-poster div that contains this link
+      // Look backwards in the HTML to find associated data-src
+      const linkPos = match.index
+      const precedingHtml = html.substring(Math.max(0, linkPos - 500), linkPos)
 
-      // Extract title from aria-label or title attribute
-      const titleMatch = card.match(/(?:title|aria-label)="([^"]+)"/) || card.match(/>([^<]+)</)
-      const title = titleMatch ? titleMatch[1].trim() : 'Unknown'
-
-      // Extract image URL from data-src
-      const imageMatch = card.match(/data-src="([^"]+)"/)
+      // Extract image from nearest data-src before the link
+      const imageMatch = precedingHtml.match(/data-src="([^"]+)"(?!.*data-src)/)
       const image = imageMatch ? imageMatch[1] : ''
 
-      // Extract year if present
-      const yearMatch = card.match(/(\d{4})/)
-      const year = yearMatch ? parseInt(yearMatch[1]) : null
+      // Extract year from title if present (4-digit number)
+      const yearMatch = title.match(/(\d{4})/)
+      const year = yearMatch ? parseInt(yearMatch[1], 10) : null
 
       results.push({
-        id,
+        id: fullId,
+        numericId,
         title,
         image,
         year,
         type
       })
     } catch (e) {
-      // Skip malformed cards
+      // Skip malformed entries
     }
-  })
+  }
 
   return results
 }
 
 /**
- * Parse media details (movie or TV show)
+ * Parse seasons HTML from FlixHQ
+ * Looks for <a> elements with href containing season ID and title
  */
-function parseMediaHTML(html) {
-  const media = {
-    title: '',
-    description: '',
-    year: null,
-    rating: null,
-    image: '',
-    type: 'movie',
-    seasons: [],
-    episodes: [],
-    servers: []
+function parseSeasonsHTML(html) {
+  const seasons = []
+
+  // Match <a> elements with href pattern like href="...-1">Season 1</a>
+  const seasonRegex = /<a[^>]*href="[^"]*-(\d+)"[^>]*>([^<]+)<\/a>/g
+  let match
+
+  while ((match = seasonRegex.exec(html)) !== null) {
+    const id = match[1]
+    const title = match[2].trim()
+
+    seasons.push({ id, title })
   }
 
-  // Extract title
-  const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/)
-  if (titleMatch) media.title = titleMatch[1].trim()
-
-  // Extract description
-  const descMatch = html.match(/<p[^>]*class="[^"]*description[^"]*"[^>]*>([^<]+)<\/p>/)
-  if (descMatch) media.description = descMatch[1].trim()
-
-  // Extract year
-  const yearMatch = html.match(/(\d{4})/)
-  if (yearMatch) media.year = parseInt(yearMatch[1])
-
-  // Extract image
-  const imageMatch = html.match(/poster[^>]*src="([^"]+)"/)
-  if (imageMatch) media.image = imageMatch[1]
-
-  // Detect if TV show by looking for seasons section
-  if (html.includes('seasons')) {
-    media.type = 'tv'
-  }
-
-  return media
+  return seasons
 }
 
 /**
- * Parse servers list from HTML
+ * Parse episodes HTML from FlixHQ
+ * Looks for nav-item elements with data-id and title attributes
+ */
+function parseEpisodesHTML(html) {
+  const episodes = []
+
+  // Match elements with data-id="..." and title="..."
+  const episodeRegex = /data-id="([^"]+)"[^>]*title="([^"]+)"/g
+  let match
+
+  while ((match = episodeRegex.exec(html)) !== null) {
+    const id = match[1]
+    const title = match[2]
+
+    episodes.push({ id, title })
+  }
+
+  return episodes
+}
+
+/**
+ * Parse servers HTML from FlixHQ
+ * Looks for elements with data-id and title attributes
  */
 function parseServersHTML(html) {
   const servers = []
 
-  // Match server entries: data-id="...", title="Vidcloud" or "UpCloud"
-  const serverRegex = /<div[^>]*data-id="([^"]+)"[^>]*>\s*<div[^>]*>([^<]+)<\/div>/g
+  // Match elements with data-id and title in any order
+  const dataIdMatch = html.match(/data-id="([^"]+)"/g) || []
+  const titleMatch = html.match(/title="([^"]+)"/g) || []
+
+  // Simple approach: find data-id followed by title in proximity
+  const serverRegex = /data-id="([^"]+)"[^>]*title="([^"]+)"/g
   let match
 
   while ((match = serverRegex.exec(html)) !== null) {
     const id = match[1]
-    const name = match[2].trim()
+    const name = match[2]
 
     servers.push({ id, name })
   }
@@ -191,7 +247,7 @@ function parseServersHTML(html) {
 }
 
 /**
- * Extract embed link from JSON response
+ * Parse JSON response to extract embed link
  */
 function parseEmbedJSON(json) {
   try {
@@ -203,71 +259,78 @@ function parseEmbedJSON(json) {
 }
 
 // ============================================================================
-// DECRYPTION API
+// M3U8 REWRITING
 // ============================================================================
 
 /**
- * Decrypt embed URL using decryption API
+ * Rewrite M3U8 manifest to proxy all media URLs
+ * Converts relative/absolute URLs to /api/proxy?url=...
+ */
+function rewriteM3u8(content, originalUrl) {
+  const originalBaseUrl = new URL(originalUrl).href.split('/').slice(0, -1).join('/')
+
+  const lines = content.split('\n')
+  const rewritten = lines.map((line) => {
+    // Keep comments and empty lines as-is
+    if (line.startsWith('#') || !line.trim()) {
+      return line
+    }
+
+    // Already a proxied URL
+    if (line.includes('/api/proxy?url=')) {
+      return line
+    }
+
+    // Absolute URL (http/https)
+    if (line.startsWith('http://') || line.startsWith('https://')) {
+      return `/api/proxy?url=${encodeURIComponent(line)}`
+    }
+
+    // Relative URL - resolve against base
+    if (line.startsWith('/')) {
+      const absoluteUrl = new URL(line, originalBaseUrl).href
+      return `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`
+    }
+
+    // Relative path
+    const absoluteUrl = `${originalBaseUrl}/${line}`
+    return `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`
+  })
+
+  return rewritten.join('\n')
+}
+
+// ============================================================================
+// DECRYPTION
+// ============================================================================
+
+/**
+ * Decrypt embed URL using decryption APIs
  */
 async function decryptEmbed(embedLink, mediaId) {
   const apis = [
-    { name: 'primary', url: DECRYPTION_API_PRIMARY },
-    { name: 'fallback', url: DECRYPTION_API_FALLBACK }
+    { name: 'primary', url: DECRYPT_PRIMARY },
+    { name: 'fallback', url: DECRYPT_FALLBACK }
   ]
 
   for (const api of apis) {
     try {
-      log(`Attempting decryption via ${api.name}`, embedLink.slice(0, 50))
+      log(`[Decrypt] Trying ${api.name}:`, embedLink.slice(0, 50))
 
       const payload = JSON.stringify({
         url: embedLink,
         mediaId: mediaId
       })
 
-      const decryptUrl = new URL(api.url)
-      const req = https.request(decryptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-          'User-Agent': USER_AGENT
-        },
-        timeout: DECRYPTION_TIMEOUT
-      })
+      const response = await httpsPost(api.url, payload, {
+        'User-Agent': USER_AGENT
+      }, 10000)
 
-      return new Promise((resolve, reject) => {
-        let data = ''
-
-        req.on('response', (res) => {
-          if (res.statusCode !== 200) {
-            return reject(new Error(`HTTP ${res.statusCode}`))
-          }
-
-          res.on('data', (chunk) => {
-            data += chunk
-          })
-
-          res.on('end', () => {
-            try {
-              const result = JSON.parse(data)
-              log(`Decryption successful (${api.name})`)
-              resolve(result)
-            } catch (e) {
-              reject(new Error('Invalid JSON response'))
-            }
-          })
-        })
-
-        req.on('error', reject)
-        req.on('timeout', () => {
-          req.destroy(new Error('Decryption timeout'))
-        })
-
-        req.write(payload)
-        req.end()
-      })
+      const result = JSON.parse(response)
+      log(`[Decrypt] Success via ${api.name}`)
+      return result
     } catch (e) {
-      log(`Decryption failed (${api.name})`, e.message)
+      log(`[Decrypt] Failed ${api.name}:`, e.message)
       continue
     }
   }
@@ -280,8 +343,7 @@ async function decryptEmbed(embedLink, mediaId) {
 // ============================================================================
 
 /**
- * GET /api/search?query=<query>
- * Returns: [{id, title, image, year, type}]
+ * GET /api/search?q=<query>
  */
 async function handleSearch(req, res, query) {
   try {
@@ -289,217 +351,273 @@ async function handleSearch(req, res, query) {
       return sendJSON(res, 400, { error: 'Query too short' })
     }
 
-    log('Search query:', query)
+    log('[Search]', query)
 
-    const url = `${FLIXHQ_API}/v1/search?query=${encodeURIComponent(query)}`
-    const html = await httpsGet(url, {
-      'User-Agent': USER_AGENT,
-      'Referer': REFERER
-    })
+    // Convert query to slug: lowercase, spaces to dashes, trim
+    const slug = query
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+
+    const url = `${FLIXHQ_BASE}/search/${slug}`
+    const html = await httpsGet(url, FLIXHQ_HEADERS, 10000)
 
     const results = parseSearchHTML(html)
-    log(`Found ${results.length} results`)
+    log(`[Search] Found ${results.length} results`)
 
     sendJSON(res, 200, results)
   } catch (e) {
-    log('Search error:', e.message)
+    log('[Search] Error:', e.message)
     sendJSON(res, 500, { error: e.message })
   }
 }
 
 /**
- * GET /api/media/:id?type=movie|tv
- * Returns: {title, description, year, type, seasons[], episodes[], servers[]}
+ * GET /api/seasons?mediaId=<numeric_id>
  */
-async function handleMedia(req, res, id, type = 'movie') {
+async function handleSeasons(req, res, mediaId) {
   try {
-    if (!id) {
-      return sendJSON(res, 400, { error: 'Missing media ID' })
+    if (!mediaId) {
+      return sendJSON(res, 400, { error: 'Missing mediaId' })
     }
 
-    log(`Fetching ${type}:`, id)
+    log('[Seasons]', mediaId)
 
-    const url = `${FLIXHQ_API}/v1/${type === 'tv' ? 'tv' : 'movie'}/${id}`
-    const html = await httpsGet(url, {
-      'User-Agent': USER_AGENT,
-      'Referer': REFERER
-    })
+    const url = `${FLIXHQ_BASE}/ajax/v2/tv/seasons/${mediaId}`
+    const html = await httpsGet(url, AJAX_HEADERS, 10000)
 
-    const media = parseMediaHTML(html)
-    media.id = id
-    media.type = type
+    const seasons = parseSeasonsHTML(html)
+    log(`[Seasons] Found ${seasons.length} seasons`)
 
-    // For TV shows, you'd need to parse seasons here
-    // For now, we'll defer season fetching to separate endpoint
-
-    sendJSON(res, 200, media)
+    sendJSON(res, 200, seasons)
   } catch (e) {
-    log('Media fetch error:', e.message)
+    log('[Seasons] Error:', e.message)
     sendJSON(res, 500, { error: e.message })
   }
 }
 
 /**
- * GET /api/episodes/:seasonId?mediaId=<id>
- * Returns: [{id, number, title}]
+ * GET /api/episodes?seasonId=<id>
  */
-async function handleEpisodes(req, res, seasonId, mediaId) {
+async function handleEpisodes(req, res, seasonId) {
   try {
-    if (!seasonId || !mediaId) {
-      return sendJSON(res, 400, { error: 'Missing seasonId or mediaId' })
+    if (!seasonId) {
+      return sendJSON(res, 400, { error: 'Missing seasonId' })
     }
 
-    log(`Fetching episodes for season:`, seasonId)
+    log('[Episodes]', seasonId)
 
-    const url = `${FLIXHQ_API}/v1/episodes/${seasonId}?mediaId=${mediaId}`
-    const html = await httpsGet(url, {
-      'User-Agent': USER_AGENT,
-      'Referer': REFERER
-    })
+    const url = `${FLIXHQ_BASE}/ajax/v2/season/episodes/${seasonId}`
+    const html = await httpsGet(url, AJAX_HEADERS, 10000)
 
-    // Parse episodes from HTML
-    const episodes = []
-    const episodeRegex = /<div[^>]*data-id="([^"]+)"[^>]*>\s*<span>(\d+)<\/span>/g
-    let match
-
-    while ((match = episodeRegex.exec(html)) !== null) {
-      episodes.push({
-        id: match[1],
-        number: parseInt(match[2]),
-        title: `Episode ${match[2]}`
-      })
-    }
+    const episodes = parseEpisodesHTML(html)
+    log(`[Episodes] Found ${episodes.length} episodes`)
 
     sendJSON(res, 200, episodes)
   } catch (e) {
-    log('Episodes fetch error:', e.message)
+    log('[Episodes] Error:', e.message)
     sendJSON(res, 500, { error: e.message })
   }
 }
 
 /**
- * GET /api/servers/:episodeId?mediaId=<id>
- * Returns: [{id, name}]
+ * GET /api/resolve?mediaId=<numeric_id>&dataId=<data_id>&type=movie|tv
  */
-async function handleServers(req, res, episodeId, mediaId) {
+async function handleResolve(req, res, mediaId, dataId, type) {
   try {
-    if (!episodeId || !mediaId) {
-      return sendJSON(res, 400, { error: 'Missing episodeId or mediaId' })
+    if (!mediaId || !type) {
+      return sendJSON(res, 400, { error: 'Missing mediaId or type' })
     }
 
-    log(`Fetching servers for episode:`, episodeId)
+    log('[Resolve]', `${type}:${mediaId}`)
 
-    const url = `${FLIXHQ_API}/v1/servers/${episodeId}?mediaId=${mediaId}`
-    const html = await httpsGet(url, {
+    let episodeId = null
+    let embedLink = null
+
+    try {
+      // For TV: get servers, pick first Vidcloud/available, get episode_id
+      if (type === 'tv' && dataId) {
+        const serversUrl = `${FLIXHQ_BASE}/ajax/v2/episode/servers/${dataId}`
+        const serversHtml = await httpsGet(serversUrl, AJAX_HEADERS, 10000)
+
+        const servers = parseServersHTML(serversHtml)
+        log(`[Resolve] Found ${servers.length} servers`)
+
+        // Pick first "Vidcloud" or first available
+        const server = servers.find((s) => s.name.toLowerCase().includes('vidcloud')) || servers[0]
+        if (server) {
+          episodeId = server.id
+        }
+      }
+      // For movies: get episode_id directly from media_id
+      else if (type === 'movie') {
+        const episodesUrl = `${FLIXHQ_BASE}/ajax/movie/episodes/${mediaId}`
+        const episodesHtml = await httpsGet(episodesUrl, AJAX_HEADERS, 10000)
+
+        const episodes = parseEpisodesHTML(episodesHtml)
+        if (episodes.length > 0) {
+          episodeId = episodes[0].id
+        }
+      }
+
+      if (!episodeId) {
+        throw new Error('No episode ID found')
+      }
+
+      // Get embed link from sources
+      const sourcesUrl = `${FLIXHQ_BASE}/ajax/episode/sources/${episodeId}`
+      const sourcesJson = await httpsGet(sourcesUrl, AJAX_HEADERS, 10000)
+
+      embedLink = parseEmbedJSON(sourcesJson)
+      if (!embedLink) {
+        throw new Error('No embed link found')
+      }
+    } catch (e) {
+      log('[Resolve] Sources error:', e.message)
+      throw e
+    }
+
+    // Decrypt embed
+    try {
+      const decrypted = await decryptEmbed(embedLink, mediaId)
+
+      const result = {
+        sources: [
+          {
+            url: decrypted.file || '',
+            hls: true
+          }
+        ],
+        subtitles: decrypted.subtitles || []
+      }
+
+      sendJSON(res, 200, result)
+    } catch (decryptError) {
+      log('[Resolve] Decrypt error:', decryptError.message)
+      sendJSON(res, 500, { error: 'Decryption failed: ' + decryptError.message })
+    }
+  } catch (e) {
+    log('[Resolve] Error:', e.message)
+    sendJSON(res, 500, { error: e.message })
+  }
+}
+
+/**
+ * GET /api/proxy?url=<encoded_url>
+ * Proxies M3U8 manifests (rewriting URLs) and pipes binary media segments directly.
+ */
+function handleProxy(req, res, encodedUrl) {
+  if (!encodedUrl) {
+    return sendJSON(res, 400, { error: 'Missing url' })
+  }
+
+  let url
+  try {
+    url = decodeURIComponent(encodedUrl)
+  } catch (e) {
+    return sendJSON(res, 400, { error: 'Invalid URL encoding' })
+  }
+
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return sendJSON(res, 400, { error: 'Invalid URL scheme' })
+  }
+
+  log('[Proxy]', url.slice(0, 80))
+
+  const isM3u8Url = url.includes('.m3u8')
+
+  const upstreamReq = https.get(url, {
+    headers: {
       'User-Agent': USER_AGENT,
-      'Referer': REFERER
-    })
-
-    const servers = parseServersHTML(html)
-    sendJSON(res, 200, servers)
-  } catch (e) {
-    log('Servers fetch error:', e.message)
-    sendJSON(res, 500, { error: e.message })
-  }
-}
-
-/**
- * GET /api/embed/:serverId?mediaId=<id>&episodeId=<id>
- * Returns: {url, quality[], subtitles[]}
- */
-async function handleEmbed(req, res, serverId, mediaId, episodeId) {
-  try {
-    if (!serverId || !mediaId) {
-      return sendJSON(res, 400, { error: 'Missing serverId or mediaId' })
+      'Referer': 'https://flixhq.to',
+      'Origin': 'https://flixhq.to'
+    }
+  }, (upstreamRes) => {
+    // Follow redirects
+    if (upstreamRes.statusCode >= 300 && upstreamRes.statusCode < 400 && upstreamRes.headers.location) {
+      upstreamRes.resume()
+      return handleProxy(req, res, encodeURIComponent(upstreamRes.headers.location))
     }
 
-    log(`Fetching embed for server:`, serverId)
-
-    // First, get embed link from FlixHQ
-    const url = `${FLIXHQ_API}/v1/embed/${serverId}?mediaId=${mediaId}${episodeId ? `&episodeId=${episodeId}` : ''}`
-    const json = await httpsGet(url, {
-      'User-Agent': USER_AGENT,
-      'Referer': REFERER
-    })
-
-    const embedLink = parseEmbedJSON(json)
-    if (!embedLink) {
-      return sendJSON(res, 404, { error: 'No embed link found' })
+    if (upstreamRes.statusCode !== 200) {
+      upstreamRes.resume()
+      return sendJSON(res, 502, { error: `Upstream HTTP ${upstreamRes.statusCode}` })
     }
 
-    // Decrypt embed link
-    const decrypted = await decryptEmbed(embedLink, mediaId)
+    const contentType = upstreamRes.headers['content-type'] || ''
+    const isM3u8Content = isM3u8Url || contentType.includes('mpegurl') || contentType.includes('x-mpegURL')
 
-    // Extract m3u8 URL and subtitles
-    const result = {
-      url: decrypted.file || '',
-      quality: ['1080', '720', '480', '360'],
-      subtitles: decrypted.subtitles || []
+    if (isM3u8Content) {
+      // Buffer as text, rewrite URLs
+      let data = ''
+      upstreamRes.setEncoding('utf8')
+      upstreamRes.on('data', (chunk) => { data += chunk })
+      upstreamRes.on('end', () => {
+        const isActuallyM3u8 = data.trimStart().startsWith('#EXTM3U')
+        if (isActuallyM3u8) {
+          const rewritten = rewriteM3u8(data, url)
+          res.writeHead(200, {
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache'
+          })
+          res.end(rewritten)
+        } else {
+          // Not actually M3U8 — send as-is
+          res.writeHead(200, {
+            'Content-Type': contentType || 'application/octet-stream',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=3600'
+          })
+          res.end(data)
+        }
+      })
+      upstreamRes.on('error', (e) => {
+        log('[Proxy] Stream error:', e.message)
+        if (!res.headersSent) sendJSON(res, 502, { error: e.message })
+      })
+    } else {
+      // Binary: pipe directly without buffering
+      res.writeHead(200, {
+        'Content-Type': contentType || 'application/octet-stream',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600'
+      })
+      upstreamRes.pipe(res)
+      upstreamRes.on('error', (e) => {
+        log('[Proxy] Pipe error:', e.message)
+        if (!res.writableEnded) res.destroy()
+      })
     }
+  })
 
-    sendJSON(res, 200, result)
-  } catch (e) {
-    log('Embed fetch error:', e.message)
-    sendJSON(res, 500, { error: e.message })
-  }
-}
+  upstreamReq.on('error', (e) => {
+    log('[Proxy] Request error:', e.message)
+    if (!res.headersSent) sendJSON(res, 502, { error: 'Proxy fetch failed: ' + e.message })
+  })
 
-/**
- * GET /api/proxy?url=<url>&quality=<quality>&subs_language=<language>
- * Applies quality rewriting and subtitle selection
- * Returns: {m3u8_url, subtitles: [{label, url}]}
- */
-async function handleProxy(req, res, url, quality = '1080', subsLanguage = 'english', subtitles = []) {
-  try {
-    if (!url) {
-      return sendJSON(res, 400, { error: 'Missing URL' })
-    }
-
-    log(`Proxying URL with quality ${quality}`)
-
-    // Rewrite quality in m3u8 URL
-    const m3u8Url = url.replace(/\/playlist\.m3u8$/, `/${quality}/index.m3u8`)
-
-    // Filter subtitles by language (case-insensitive)
-    const filteredSubs = subtitles.filter(sub =>
-      sub.label && sub.label.toLowerCase().includes(subsLanguage.toLowerCase())
-    )
-
-    const result = {
-      m3u8_url: m3u8Url,
-      subtitles: filteredSubs
-    }
-
-    sendJSON(res, 200, result)
-  } catch (e) {
-    log('Proxy error:', e.message)
-    sendJSON(res, 500, { error: e.message })
-  }
+  upstreamReq.setTimeout(15000, () => {
+    upstreamReq.destroy(new Error('Timeout'))
+  })
 }
 
 // ============================================================================
 // STATIC FILE SERVING
 // ============================================================================
 
-function serveStatic(res, filePath) {
-  try {
-    const content = fs.readFileSync(filePath, 'utf8')
-    const ext = path.extname(filePath)
-    const mimeTypes = {
-      '.html': 'text/html',
-      '.js': 'application/javascript',
-      '.css': 'text/css',
-      '.json': 'application/json',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.svg': 'image/svg+xml'
+function serveStatic(filePath, contentType) {
+  return (res) => {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8')
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*'
+      })
+      res.end(content)
+    } catch (e) {
+      sendJSON(res, 404, { error: 'File not found' })
     }
-    const contentType = mimeTypes[ext] || 'text/plain'
-    res.writeHead(200, { 'Content-Type': contentType })
-    res.end(content)
-  } catch (e) {
-    res.writeHead(404, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'File not found' }))
   }
 }
 
@@ -537,54 +655,52 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // Only allow GET for now
+  if (req.method !== 'GET') {
+    return sendJSON(res, 405, { error: 'Method not allowed' })
+  }
+
   log(`${req.method} ${pathname}`)
 
   // ── API ROUTES ──
   if (pathname === '/api/search') {
-    const query = searchParams.get('query')
+    const query = searchParams.get('q')
     return handleSearch(req, res, query)
   }
 
-  if (pathname.startsWith('/api/media/')) {
-    const id = pathname.split('/').pop()
-    const type = searchParams.get('type') || 'movie'
-    return handleMedia(req, res, id, type)
+  if (pathname === '/api/seasons') {
+    const mediaId = searchParams.get('mediaId')
+    return handleSeasons(req, res, mediaId)
   }
 
-  if (pathname.startsWith('/api/episodes/')) {
-    const seasonId = pathname.split('/').pop()
-    const mediaId = searchParams.get('mediaId')
-    return handleEpisodes(req, res, seasonId, mediaId)
+  if (pathname === '/api/episodes') {
+    const seasonId = searchParams.get('seasonId')
+    return handleEpisodes(req, res, seasonId)
   }
 
-  if (pathname.startsWith('/api/servers/')) {
-    const episodeId = pathname.split('/').pop()
+  if (pathname === '/api/resolve') {
     const mediaId = searchParams.get('mediaId')
-    return handleServers(req, res, episodeId, mediaId)
-  }
-
-  if (pathname.startsWith('/api/embed/')) {
-    const serverId = pathname.split('/').pop()
-    const mediaId = searchParams.get('mediaId')
-    const episodeId = searchParams.get('episodeId')
-    return handleEmbed(req, res, serverId, mediaId, episodeId)
+    const dataId = searchParams.get('dataId')
+    const type = searchParams.get('type')
+    return handleResolve(req, res, mediaId, dataId, type)
   }
 
   if (pathname === '/api/proxy') {
     const proxyUrl = searchParams.get('url')
-    const quality = searchParams.get('quality') || '1080'
-    const subsLanguage = searchParams.get('subs_language') || 'english'
-    const subtitles = [] // Would be passed from frontend
-    return handleProxy(req, res, proxyUrl, quality, subsLanguage, subtitles)
+    return handleProxy(req, res, proxyUrl)
   }
 
   // ── STATIC FILES ──
   if (pathname === '/' || pathname === '/index.html') {
-    return serveStatic(res, path.join(__dirname, 'index.html'))
+    return serveStatic(path.join(__dirname, 'index.html'), 'text/html')(res)
   }
 
-  if (pathname === '/anilist.js') {
-    return serveStatic(res, path.join(__dirname, 'anilist.js'))
+  if (pathname === '/watch' || pathname === '/watch.html') {
+    return serveStatic(path.join(__dirname, 'watch.html'), 'text/html')(res)
+  }
+
+  if (pathname === '/app.js') {
+    return serveStatic(path.join(__dirname, 'app.js'), 'application/javascript')(res)
   }
 
   // 404
@@ -593,18 +709,17 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`
-╔════════════════════════════════════════╗
-║         🎬 mov-web Server Started 🎬  ║
-║                                        ║
-║   URL: http://localhost:${PORT}            ║
-║   ENV: ${NODE_ENV}                   ║
-║                                        ║
-║  Base: ${FLIXHQ_BASE}          ║
-║  API:  ${FLIXHQ_API.slice(0, 30)}... ║
-╚════════════════════════════════════════╝
+╔═════════════════════════════════════╗
+║     🎬 mov-web Server Started 🎬    ║
+║                                     ║
+║   URL: http://localhost:${PORT}         ║
+║   ENV: ${NODE_ENV}                 ║
+║                                     ║
+║   Source: FlixHQ                    ║
+╚═════════════════════════════════════╝
   `)
 })
 
 server.on('error', (e) => {
-  console.error('Server error:', e)
+  console.error('[Server Error]', e)
 })
