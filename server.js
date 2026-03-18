@@ -461,10 +461,21 @@ async function handleResolve(req, res, mediaId, dataId, type) {
         const episodesUrl = `${FLIXHQ_BASE}/ajax/movie/episodes/${mediaId}`
         const episodesHtml = await httpsGet(episodesUrl, AJAX_HEADERS, 10000)
 
-        const episodes = parseEpisodesHTML(episodesHtml)
-        if (episodes.length > 0) {
-          episodeId = episodes[0].id
+        // Movie endpoint returns a server list with data-linkid attributes
+        // e.g. <a id="watch-5361022" data-linkid="5361022" ... title="Vidcloud">
+        const serverRegex = /data-linkid="([^"]+)"[^>]*title="([^"]+)"/g
+        const servers = []
+        let m
+        while ((m = serverRegex.exec(episodesHtml)) !== null) {
+          servers.push({ id: m[1], name: m[2] })
         }
+
+        // Prefer Vidcloud, else first available
+        const server = servers.find(s => s.name.toLowerCase().includes('vidcloud')) || servers[0]
+        if (server) {
+          episodeId = server.id
+        }
+        log(`[Resolve] Movie servers found: ${servers.length}, using: ${server?.name}`)
       }
 
       if (!episodeId) {
