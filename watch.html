@@ -198,57 +198,97 @@
       max-width: 300px;
     }
 
-    /* ── Episode Grid ── */
-    #episode-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
+    /* ── Episode Pills ── */
+    .episodes-scroller {
+      display: flex;
+      gap: 0.4rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 0.25rem 0 0.5rem;
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      scrollbar-color: var(--pico-form-element-border-color) transparent;
+      margin-bottom: 1.5rem;
     }
 
-    .episode-btn {
-      padding: 1rem 0.5rem;
-      text-align: center;
-      min-height: 100px;
+    .episodes-scroller::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .episodes-scroller::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .episodes-scroller::-webkit-scrollbar-thumb {
+      background: var(--pico-form-element-border-color);
+      border-radius: 2px;
+    }
+
+    .episode-pill {
+      min-width: 40px;
+      height: 40px;
+      padding: 0 0.6rem;
       display: flex;
       align-items: center;
       justify-content: center;
-      word-wrap: break-word;
-      word-break: break-word;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      border: 2px solid var(--pico-form-element-border-color);
-      border-radius: 6px;
+      border-radius: 20px;
+      border: 1px solid var(--pico-form-element-border-color);
       background: var(--pico-form-element-background-color);
+      color: var(--pico-form-element-color);
       cursor: pointer;
-      transition: all 0.2s;
+      flex-shrink: 0;
+      font-weight: 600;
       font-size: 0.875rem;
-    }
-
-    .episode-btn:hover {
-      border-color: var(--mov-accent);
-      color: var(--mov-accent);
-    }
-
-    .episode-btn.watched {
-      background: rgba(255, 0, 0, 0.1);
-      border-color: var(--mov-accent);
-      opacity: 0.7;
+      transition: all 0.15s ease;
       position: relative;
     }
 
-    .episode-btn.watched::after {
-      content: '✓';
-      position: absolute;
-      top: 4px;
-      right: 6px;
+    .episode-pill:hover {
+      border-color: var(--mov-accent);
       color: var(--mov-accent);
-      font-weight: bold;
-      font-size: 1rem;
+    }
+
+    .episode-pill.active {
+      background: var(--mov-accent);
+      border-color: var(--mov-accent);
+      color: white;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.35);
+    }
+
+    .episode-pill.watched:not(.active) {
+      background: rgba(255, 0, 0, 0.1);
+      border-color: var(--mov-accent);
+      opacity: 0.65;
+    }
+
+    /* Tooltip */
+    @media (hover: hover) {
+      .episode-pill::after {
+        content: attr(data-title);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--pico-card-background-color);
+        color: var(--pico-form-element-color);
+        padding: 0.3rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s;
+        border: 1px solid var(--pico-form-element-border-color);
+        z-index: 10;
+        font-weight: 400;
+      }
+
+      .episode-pill:hover::after {
+        opacity: 1;
+      }
     }
 
     /* ── Loading Overlay ── */
@@ -307,7 +347,6 @@
       }
     }
 
-    /* ── Responsive ── */
     @media (max-width: 768px) {
       #title {
         font-size: 1.25rem;
@@ -316,17 +355,6 @@
       .header {
         flex-direction: row;
         flex-wrap: wrap;
-      }
-
-      #episode-grid {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .episode-btn {
-        min-height: 80px;
-        font-size: 0.75rem;
-        padding: 0.5rem;
       }
 
       .quality-btn {
@@ -378,15 +406,10 @@
         height: 36px;
       }
 
-      #episode-grid {
-        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-        gap: 0.5rem;
-      }
-
-      .episode-btn {
-        min-height: 70px;
-        font-size: 0.7rem;
-        padding: 0.4rem;
+      .episode-pill {
+        min-width: 34px;
+        height: 34px;
+        font-size: 0.8rem;
       }
 
       .quality-btn {
@@ -432,7 +455,7 @@
       </div>
       <div>
         <p class="quality-bar-label">Episodes</p>
-        <div id="episode-grid"></div>
+        <div class="episodes-scroller" id="episode-list"></div>
       </div>
     </div>
 

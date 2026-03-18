@@ -417,28 +417,34 @@ async function loadEpisodes(seasonId, mediaId) {
 
     const episodes = await response.json()
 
-    const episodeGrid = document.getElementById('episode-grid')
-    if (!episodeGrid) return
+    const episodeList = document.getElementById('episode-list')
+    if (!episodeList) return
 
-    episodeGrid.innerHTML = ''
+    episodeList.innerHTML = ''
 
     const watched = getWatchedEpisodes(mediaId)
 
-    episodes.forEach(episode => {
+    episodes.forEach((episode, index) => {
       const btn = document.createElement('button')
       btn.id = `episode-${episode.id}`
-      btn.className = 'episode-btn'
-      btn.textContent = episode.title
+      btn.className = 'episode-pill'
+      btn.textContent = index + 1
+      btn.dataset.title = episode.title || `Episode ${index + 1}`
 
       if (watched.includes(episode.id)) {
         btn.classList.add('watched')
       }
 
       btn.onclick = () => {
+        // Mark previous active pill inactive
+        episodeList.querySelectorAll('.episode-pill.active')
+          .forEach(p => p.classList.remove('active'))
+        btn.classList.add('active')
+        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
         resolveAndPlay(mediaId, episode.id, 'tv')
       }
 
-      episodeGrid.appendChild(btn)
+      episodeList.appendChild(btn)
     })
 
   } catch (error) {
