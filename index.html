@@ -212,6 +212,28 @@
       color: #ff8c00;
     }
 
+    /* ── Watched Indicator ── */
+    .result-card {
+      position: relative;
+    }
+
+    .watched-ribbon {
+      position: absolute;
+      top: 0;
+      left: 0;
+      background: rgba(16, 185, 129, 0.92); /* emerald green */
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.2rem 0.45rem;
+      border-radius: 0.5rem 0 0.4rem 0;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      line-height: 1.4;
+      pointer-events: none;
+      z-index: 2;
+    }
+
     /* ── Loading State ── */
     #loading {
       display: none;
@@ -364,6 +386,27 @@
     };
 
     // ========== WATCH HISTORY ==========
+    function getWatchedState(id, type, numericId) {
+      try {
+        if (type === 'movie') {
+          // Movie is "watched" if it appears in history
+          const history = JSON.parse(localStorage.getItem('mov-web-history') || '[]');
+          const inHistory = history.some(item => item.id === id);
+          return inHistory ? { watched: true, label: '✓ Watched' } : null;
+        } else {
+          // TV: count watched episodes from watched-episodes store
+          const watched = JSON.parse(localStorage.getItem('mov-web-watched-episodes') || '{}');
+          const eps = watched[numericId];
+          if (eps && eps.length > 0) {
+            return { watched: true, label: `✓ ${eps.length} ep` };
+          }
+          return null;
+        }
+      } catch (e) {
+        return null;
+      }
+    }
+
     function saveToHistory(id, type, title, image) {
       try {
         const history = JSON.parse(localStorage.getItem('mov-web-history') || '[]');
@@ -430,6 +473,17 @@
       img.src = item.image;
       img.alt = item.title;
       img.loading = 'lazy';
+      div.appendChild(img);
+
+      // Watched ribbon — overlaid on top of poster
+      const numericId = item.numericId || (item.id.match(/(\d+)$/) || [])[1];
+      const watchedState = getWatchedState(item.id, item.type, numericId);
+      if (watchedState) {
+        const ribbon = document.createElement('div');
+        ribbon.className = 'watched-ribbon';
+        ribbon.textContent = watchedState.label;
+        div.appendChild(ribbon);
+      }
 
       const info = document.createElement('div');
       info.className = 'card-info';
@@ -452,7 +506,6 @@
       meta.appendChild(badge);
       info.appendChild(title);
       info.appendChild(meta);
-      div.appendChild(img);
       div.appendChild(info);
 
       return div;
