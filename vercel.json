@@ -1,30 +1,10 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/*.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "*.html",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "*.js",
-      "use": "@vercel/static",
-      "config": {
-        "ignore": ["server.js", "api/**"]
-      }
-    }
-  ],
-  "routes": [
-    { "src": "/api/search", "dest": "/api/search.js" },
-    { "src": "/api/seasons", "dest": "/api/seasons.js" },
-    { "src": "/api/episodes", "dest": "/api/episodes.js" },
-    { "src": "/api/resolve", "dest": "/api/resolve.js" },
-    { "src": "/api/proxy", "dest": "/api/proxy.js" },
-    { "src": "/watch", "dest": "/watch.html" },
-    { "src": "/", "dest": "/index.html" },
-    { "src": "/app.js", "dest": "/app.js" }
+  "rewrites": [
+    { "source": "/api/search", "destination": "/api/search.js" },
+    { "source": "/api/seasons", "destination": "/api/seasons.js" },
+    { "source": "/api/episodes", "destination": "/api/episodes.js" },
+    { "source": "/api/resolve", "destination": "/api/resolve.js" },
+    { "source": "/api/proxy", "destination": "/api/proxy.js" },
+    { "source": "/watch", "destination": "/watch.html" }
   ]
 }
