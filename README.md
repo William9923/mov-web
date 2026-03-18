@@ -1,43 +1,60 @@
-# mov-web
+# (ﾉ◕ヮ◕)ﾉ mov-web
 
-Browser-based movie & TV streaming frontend. Lightweight, no sign-up required.
+> Lightweight, no-signup movie & TV streaming — right in your browser.
 
-Built with vanilla JavaScript, Pico CSS, HLS.js, and Plyr. Zero npm dependencies — only Node.js built-ins.
+**Live:** [mov-web-viewer.vercel.app](https://mov-web-viewer.vercel.app)
 
-## Features
+---
 
-- Real-time search across movies and TV shows
-- HLS streaming via Hls.js + Plyr player
-- Season/episode selection for TV series
-- Quality switching (1080p / 720p / 480p / 360p)
-- Multi-language subtitle support
-- Dark/light theme
-- Watch history via localStorage
-- Keyboard shortcuts
+## ✨ Features
 
-## Quick Start
+- 🔍 Search movies and TV shows
+- 📺 HLS streaming via Hls.js
+- 🎞️ Season & episode browsing for TV series
+- 🎚️ Quality switching (Auto / 1080p / 720p / 480p / 360p)
+- 💬 Multi-language subtitle support
+- ✅ Watch history & episode progress tracked locally
+- ⌨️ Keyboard shortcuts
+- 🌑 Forced dark theme — always
+
+---
+
+## 🚀 Quick Start
 
 **Requires Node.js 18+. No `npm install` needed.**
 
 ```bash
-git clone <repo>
+git clone https://github.com/William9923/mov-web
 cd mov-web
 node server.js
 ```
 
-Visit **http://localhost:3000**
-
-To use a different port:
+Open **http://localhost:3000**
 
 ```bash
+# Custom port
 PORT=8080 node server.js
 ```
 
-## Architecture
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Space` | Play / Pause |
+| `→` | Skip forward 10s |
+| `←` | Rewind 10s |
+| `M` | Mute toggle |
+| `F` | Fullscreen |
+
+---
+
+## 🗂️ Project Structure
 
 ```
 mov-web/
-├── server.js        # Local dev server (all logic, no deps)
+├── server.js        # Local dev server — all logic, zero dependencies
 ├── index.html       # Search page
 ├── watch.html       # Player page
 ├── app.js           # Watch page JS (HLS, quality, subtitles, shortcuts)
@@ -52,64 +69,53 @@ mov-web/
 └── package.json
 ```
 
-### Data Flow
+---
+
+## 🔌 API Endpoints
+
+| Endpoint | Params | Description |
+|----------|--------|-------------|
+| `GET /api/search` | `q` | Search movies & TV shows |
+| `GET /api/seasons` | `mediaId` | List seasons for a TV show |
+| `GET /api/episodes` | `seasonId` | List episodes for a season |
+| `GET /api/resolve` | `mediaId`, `dataId`, `type` | Resolve embed → m3u8 URL |
+| `GET /api/proxy` | `url` | CORS proxy + M3U8 URL rewriting |
+
+---
+
+## 🔄 Data Flow
 
 ```
 Search query
-  → /api/search → FlixHQ HTML scraping → results
+  → /api/search  →  FlixHQ HTML scrape  →  results grid
 
-Click result (movie)
-  → /api/resolve?type=movie&mediaId=...
-      → FlixHQ /ajax/movie/episodes/<id>   (get episode ID)
-      → FlixHQ /ajax/episode/sources/<id>  (get embed link)
-      → POST dec.eatmynerds.live           (decrypt → .m3u8 URL)
-  → Hls.js loads master.m3u8 via /api/proxy
-      → proxy rewrites all segment URLs to /api/proxy?url=...
-      → binary .ts segments piped directly (no buffering)
+Click movie
+  → /api/resolve?type=movie&mediaId=…
+      → FlixHQ /ajax/movie/episodes/<id>   (server list)
+      → FlixHQ /ajax/episode/sources/<id>  (embed link)
+      → POST decrypt API                   (→ .m3u8 URL)
+  → Hls.js streams via /api/proxy
+      → M3U8 segment URLs rewritten to /api/proxy?url=…
+      → .ts segments piped directly (no buffering)
 
-Click result (TV)
-  → /api/seasons?mediaId=...  → season list
-  → /api/episodes?seasonId=... → episode list
-  → /api/resolve?type=tv&mediaId=...&dataId=... → same decrypt flow
+Click TV show
+  → /api/seasons  →  season selector
+  → /api/episodes →  episode pill strip
+  → click episode → same resolve + decrypt flow as movie
 ```
 
-### Proxy Design
+---
 
-The `/api/proxy` endpoint is the critical CORS bridge:
+## 🚢 Deployment
 
-- **M3U8 manifests**: buffered as text, all URLs rewritten to `/api/proxy?url=...`, returned as `application/vnd.apple.mpegurl`
-- **Binary segments (`.ts`, `.key`)**: streamed via `pipe()` directly to the client — no buffering, no string coercion — preserving binary integrity
-- **Redirects**: followed automatically (up to 5 hops)
+### Vercel (recommended)
 
-## API Endpoints
+1. Push to GitHub
+2. Go to [vercel.com/new](https://vercel.com/new) → import your repo
+3. Framework preset: **Other** — leave build settings blank
+4. Click **Deploy**
 
-| Endpoint | Params | Description |
-|---|---|---|
-| `GET /api/search` | `q` | Search movies/TV |
-| `GET /api/seasons` | `mediaId` | TV seasons |
-| `GET /api/episodes` | `seasonId` | Season episodes |
-| `GET /api/resolve` | `mediaId`, `dataId`, `type` | Decrypt → m3u8 URL |
-| `GET /api/proxy` | `url` | CORS proxy + M3U8 rewrite |
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `Space` | Play / Pause |
-| `→` | Skip forward 5s |
-| `←` | Rewind 5s |
-| `M` | Mute toggle |
-| `F` | Fullscreen |
-
-## Deployment
-
-### Vercel
-
-```bash
-vercel deploy
-```
-
-The `vercel.json` routes `/api/*` to serverless functions in `api/` and static files (`index.html`, `watch.html`, `app.js`) directly.
+`vercel.json` handles all routing. Vercel auto-detects `api/*.js` as serverless functions.
 
 ### Self-hosted
 
@@ -117,8 +123,10 @@ The `vercel.json` routes `/api/*` to serverless functions in `api/` and static f
 node server.js
 ```
 
-`server.js` is a standalone file with all logic embedded — no shared library needed. It serves both the API and static files.
+`server.js` is fully self-contained — it serves both the API and all static files.
 
-## Legal Disclaimer
+---
 
-For educational purposes only. Users are responsible for compliance with local laws.
+## ⚖️ Disclaimer
+
+For educational purposes only. Content is sourced from third-party sites. Users are responsible for compliance with applicable laws in their jurisdiction.
