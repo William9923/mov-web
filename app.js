@@ -180,6 +180,11 @@ function setupHls(m3u8Url, video, subtitles = []) {
       // When manifest is parsed, setup quality levels
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         clearTimeout(timeout)
+        // Reveal player + controls on first load
+        const vc = document.getElementById('video-container')
+        const pc = document.getElementById('player-controls')
+        if (vc) vc.style.display = ''
+        if (pc) pc.style.display = ''
         renderQualityBar(hls.levels)
         renderSubtitleSelector(subtitles, video)
         video.play()

@@ -3,15 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎬 Watch - mov-web</title>
-  <meta name="description" content="Watch movies and TV shows in mov-web.">
+  <title>(ﾉ◕ヮ◕)ﾉ mov-web</title>
+  <meta name="description" content="Search and stream movies and TV shows · Lightweight · No sign-up required.">
 
   <!-- Pico CSS -->
   <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css"></noscript>
-
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- HLS.js -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -256,9 +253,27 @@
     }
 
     .episode-pill.watched:not(.active) {
-      background: rgba(255, 0, 0, 0.1);
+      background: rgba(255, 0, 0, 0.12);
       border-color: var(--mov-accent);
-      opacity: 0.65;
+      color: var(--mov-accent);
+    }
+
+    .episode-pill.watched:not(.active)::before {
+      content: '✓';
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      width: 14px;
+      height: 14px;
+      background: var(--mov-accent);
+      color: white;
+      border-radius: 50%;
+      font-size: 9px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
     }
 
     /* Tooltip */
@@ -441,9 +456,7 @@
   <main>
     <!-- Header -->
     <div class="header">
-      <button class="back-btn" title="Go back" onclick="window.location.href='/index.html'">
-        <i class="fas fa-arrow-left"></i>
-      </button>
+      <button class="back-btn" title="Go back" onclick="window.location.href='/index.html'">&#8592;</button>
       <h1 id="title">Watch</h1>
     </div>
 
@@ -460,12 +473,12 @@
     </div>
 
     <!-- Video Player -->
-    <div class="video-container">
+    <div class="video-container" id="video-container" style="display:none">
       <video id="video" controls></video>
     </div>
 
     <!-- Player Controls -->
-    <div class="player-controls">
+    <div class="player-controls" id="player-controls" style="display:none">
       <!-- Quality Selection -->
       <div>
         <p class="quality-bar-label">Quality</p>
