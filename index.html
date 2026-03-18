@@ -3,15 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎬 mov-web - Search</title>
+  <title>(ﾉ◕ヮ◕)ﾉ mov-web</title>
   <meta name="description" content="Search and stream movies and TV shows · Lightweight · No sign-up required.">
 
   <!-- Pico CSS (classless, CDN) -->
   <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css"></noscript>
-
-  <!-- Font Awesome (CDN) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <!-- Dynamic Favicon -->
   <script>
@@ -19,10 +16,10 @@
     canvas.width = 64
     canvas.height = 64
     const ctx = canvas.getContext('2d')
-    ctx.font = '48px serif'
+    ctx.font = '44px serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('🎬', 32, 32)
+    ctx.fillText('ﾉ◕', 32, 32)
     const link = document.createElement('link')
     link.rel = 'icon'
     link.href = canvas.toDataURL()
@@ -33,12 +30,8 @@
     :root {
       --accent: #e50914;
       --accent-hover: #cc0000;
-      --accent-light: #fff0f0;
+      --accent-light: rgba(229,9,20,0.15);
       --pico-font-size: 16px;
-    }
-
-    html[data-theme="dark"] {
-      --accent-light: #2a0000;
     }
 
     * {
@@ -46,15 +39,12 @@
     }
 
     body {
-      display: flex;
-      flex-direction: column;
       min-height: 100vh;
       margin: 0;
       padding: 0;
     }
 
     body > main {
-      flex: 1;
       max-width: 1200px;
       width: 100%;
       margin: 0 auto;
@@ -62,76 +52,57 @@
       padding-top: 1rem;
     }
 
-    /* ── Header ── */
-    header {
-      display: flex;
-      justify-content: flex-start;
-      align-items: flex-start;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    .header-left {
-      flex: 1;
-      min-width: 0;
-    }
-
     h1 {
-      margin: 0 0 0.25rem 0;
-      font-size: 2rem;
+      margin-bottom: 0.25rem;
     }
 
-    /* ── Search Section ── */
-    .search-section {
+    body > main {
+      padding-top: 2.5rem;
+    }
+
+    /* ── Search form ── */
+    #search-form {
       display: flex;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
       align-items: center;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
     }
 
-    .search-input-wrapper {
-      position: relative;
+    #search-form input[type="search"] {
       flex: 1;
-      min-width: 0;
+      min-width: 180px;
+      margin-bottom: 0;
     }
 
-    .search-input-wrapper i {
-      position: absolute;
-      left: 0.75rem;
-      top: 50%;
-      transform: translateY(-50%);
-      opacity: 0.5;
-      pointer-events: none;
-      font-size: 0.9rem;
-    }
-
-    #search-input {
-      width: 100%;
-      padding-left: 2.5rem;
+    #search-form input[type="search"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-light);
     }
 
     #search-btn {
-      flex: 0 0 auto;
-      background: var(--accent);
-      color: white;
-      border: none;
-      padding: 0.6rem 1.25rem;
+      width: auto;
+      margin-bottom: 0;
       font-weight: 600;
-      cursor: pointer;
-      border-radius: 0.25rem;
-      transition: all 0.2s;
-      white-space: nowrap;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
     }
 
-    #search-btn:hover {
+    #search-btn:hover:not([disabled]) {
       background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(229,9,20,0.25);
     }
 
     /* ── Filter Toggle ── */
     .filter-section {
       display: flex;
       gap: 0.5rem;
+      margin-top: 1.25rem;
       margin-bottom: 1.5rem;
       flex-wrap: wrap;
     }
@@ -254,14 +225,19 @@
     }
 
     .spinner {
-      font-size: 1.5rem;
-      animation: spin 1s linear infinite;
+      display: inline-block;
+      width: 1.5rem;
+      height: 1.5rem;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.5rem;
     }
 
     @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
+      to { transform: rotate(360deg); }
     }
 
     /* ── Empty State ── */
@@ -288,20 +264,8 @@
         padding-top: 0.75rem;
       }
 
-      header {
-        margin-bottom: 1rem;
-      }
-
       h1 {
         font-size: 1.5rem;
-      }
-
-      .search-section {
-        margin-bottom: 1rem;
-      }
-
-      .filter-section {
-        margin-bottom: 1rem;
       }
 
       #results {
@@ -340,27 +304,20 @@
 
 <body>
   <main>
-    <!-- Header -->
-    <header>
-      <div class="header-left">
-        <h1>🎬 mov-web</h1>
-      </div>
-    </header>
+    <h1>(ﾉ◕ヮ◕)ﾉ mov-web</h1>
+    <p><small>Search movies to watch</small></p>
 
-    <!-- Search Section -->
-    <section class="search-section">
-      <div class="search-input-wrapper">
-        <i class="fas fa-search"></i>
-        <input 
-          type="text" 
-          id="search-input" 
-          placeholder="Search movies, TV shows..."
-          autocomplete="off"
-          spellcheck="false"
-        >
-      </div>
-      <button id="search-btn">Search</button>
-    </section>
+    <!-- Search Form -->
+    <form id="search-form">
+      <input
+        type="search"
+        id="search-input"
+        placeholder="Search movies, TV shows..."
+        autocomplete="off"
+        autofocus
+      >
+      <button id="search-btn" type="submit">Search</button>
+    </form>
 
     <!-- Filter Toggles -->
     <section class="filter-section">
@@ -372,18 +329,15 @@
     </section>
 
     <!-- Loading Spinner -->
-    <div id="loading" class="loading">
-      <div class="spinner">
-        <i class="fas fa-spinner fa-spin"></i>
-      </div>
-      <p>Searching...</p>
+    <div id="loading">
+      <span class="spinner"></span>Searching...
     </div>
 
     <!-- Results Grid -->
     <section id="results"></section>
 
     <!-- Empty State -->
-    <div id="empty-state" class="empty-state"></div>
+    <div id="empty-state"></div>
   </main>
 
   <script>
@@ -402,6 +356,7 @@
 
     // ========== DOM ELEMENTS ==========
     const DOM = {
+      searchForm: document.getElementById('search-form'),
       searchInput: document.getElementById('search-input'),
       searchBtn: document.getElementById('search-btn'),
       filterBtns: document.querySelectorAll('.filter-btn'),
@@ -415,11 +370,7 @@
       try {
         const history = JSON.parse(localStorage.getItem('mov-web-history') || '[]');
         const newItem = { id, type, title, image, timestamp: Date.now() };
-        
-        // Remove duplicate
         const filtered = history.filter(item => item.id !== id);
-        
-        // Keep only 10 most recent
         const updated = [newItem, ...filtered].slice(0, 10);
         localStorage.setItem('mov-web-history', JSON.stringify(updated));
       } catch (e) {
@@ -440,15 +391,9 @@
 
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
         const data = await response.json();
         STATE.results = data || [];
-        
-        // Apply filter and display
         displayResults(filterResults(STATE.results));
       } catch (error) {
         console.error('Search error:', error);
@@ -460,9 +405,7 @@
 
     // ========== FILTERING & DISPLAY ==========
     function filterResults(items) {
-      if (STATE.selectedType === 'all') {
-        return items;
-      }
+      if (STATE.selectedType === 'all') return items;
       return items.filter(item => item.type === STATE.selectedType);
     }
 
@@ -470,14 +413,13 @@
       DOM.results.innerHTML = '';
 
       if (items.length === 0) {
-        DOM.emptyState.innerHTML = '<p><i class="fas fa-inbox"></i> No results found</p>';
+        DOM.emptyState.innerHTML = '<p>No results found</p>';
         DOM.emptyState.classList.add('active');
         return;
       }
 
       items.forEach(item => {
-        const card = createResultCard(item);
-        DOM.results.appendChild(card);
+        DOM.results.appendChild(createResultCard(item));
       });
     }
 
@@ -510,10 +452,8 @@
 
       meta.appendChild(year);
       meta.appendChild(badge);
-
       info.appendChild(title);
       info.appendChild(meta);
-
       div.appendChild(img);
       div.appendChild(info);
 
@@ -526,32 +466,29 @@
     }
 
     function showLoading(show) {
-      if (show) {
-        DOM.loading.classList.add('active');
-      } else {
-        DOM.loading.classList.remove('active');
-      }
+      DOM.loading.classList.toggle('active', show);
     }
 
     function showError(message) {
-      DOM.emptyState.innerHTML = `<p><i class="fas fa-exclamation-circle"></i> ${message}</p>`;
+      DOM.emptyState.innerHTML = `<p>${message}</p>`;
       DOM.emptyState.classList.add('active');
     }
 
     // ========== NAVIGATION ==========
     function openWatch(id, type, title, image) {
       saveToHistory(id, type, title, image);
-      const params = new URLSearchParams({
-        id,
-        type,
-        title
-      });
+      const params = new URLSearchParams({ id, type, title });
       window.location.href = `/watch.html?${params.toString()}`;
     }
 
     // ========== EVENT LISTENERS ==========
     function setupEventListeners() {
-      // Search input with debounce
+      DOM.searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        clearTimeout(STATE.debounceTimer);
+        searchMovies(DOM.searchInput.value);
+      });
+
       DOM.searchInput.addEventListener('input', (e) => {
         clearTimeout(STATE.debounceTimer);
         STATE.debounceTimer = setTimeout(() => {
@@ -559,18 +496,7 @@
         }, CONFIG.DEBOUNCE_DELAY);
       });
 
-      // Search button
-      DOM.searchBtn.addEventListener('click', () => {
-        clearTimeout(STATE.debounceTimer);
-        searchMovies(DOM.searchInput.value);
-      });
-
-      // Keyboard shortcuts
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && document.activeElement === DOM.searchInput) {
-          clearTimeout(STATE.debounceTimer);
-          searchMovies(DOM.searchInput.value);
-        }
         if (e.key === 'Escape') {
           DOM.searchInput.value = '';
           clearResults();
@@ -578,22 +504,14 @@
         }
       });
 
-      // Filter buttons
       DOM.filterBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', () => {
           DOM.filterBtns.forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           STATE.selectedType = btn.dataset.type;
-          
-          // Re-apply filter to current results
-          if (STATE.results.length > 0) {
-            displayResults(filterResults(STATE.results));
-          }
+          if (STATE.results.length > 0) displayResults(filterResults(STATE.results));
         });
       });
-
-      // Focus search input on page load
-      DOM.searchInput.focus();
     }
 
     // ========== INITIALIZATION ==========
@@ -601,7 +519,6 @@
       setupEventListeners();
     }
 
-    // Start on DOM ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', init);
     } else {
