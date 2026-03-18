@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎬 mov-web</title>
+  <meta name="description" content="Stream movies and TV shows in your browser — lightweight, no sign-up required.">
+
+  <!-- Pico CSS -->
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css"></noscript>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- HLS.js for m3u8 streaming -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <!-- Dynamic Favicon -->
+  <script>
+    const canvas = document.createElement('canvas')
+    canvas.width = 64
+    canvas.height = 64
+    const ctx = canvas.getContext('2d')
+    ctx.font = '48px serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('🎬', 32, 32)
+    const link = document.createElement('link')
+    link.rel = 'icon'
+    link.href = canvas.toDataURL()
+    document.head.appendChild(link)
+  </script>
+
+  <style>
+    :root {
+      --pico-font-size: 16px;
+      --mov-accent: #ff0000;
+      --mov-accent-hover: #cc0000;
+      --mov-accent-light: #fff0f0;
+    }
+
+    html[data-theme="dark"] {
+      --mov-accent-light: #2a0000;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    body > main {
+      flex: 1;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding-inline: 1rem;
+    }
+
+    h1 {
+      margin-bottom: 0.5rem;
+      font-size: 2rem;
+    }
+
+    .subtitle {
+      opacity: 0.7;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Search Section ── */
+    .search-section {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+    }
+
+    #search-input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    #search-input::placeholder {
+      color: var(--pico-form-element-placeholder-color);
+    }
+
+    /* ── Results Grid ── */
+    #results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .result-card {
+      cursor: pointer;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+      background: var(--pico-card-background-color);
+      border: 1px solid var(--pico-card-border-color);
+    }
+
+    .result-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .result-card img {
+      width: 100%;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+      background: var(--pico-form-element-background-color);
+    }
+
+    .result-card-info {
+      padding: 0.75rem;
+    }
+
+    .result-card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 0 0 0.25rem 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-card-meta {
+      font-size: 0.75rem;
+      opacity: 0.7;
+      display: flex;
+      gap: 0.5rem;
+      justify-content: space-between;
+    }
+
+    .result-card-type {
+      display: inline-block;
+      background: var(--mov-accent-light);
+      color: var(--mov-accent);
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-weight: 600;
+      font-size: 0.7rem;
+    }
+
+    /* ── Loading State ── */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 2rem;
+      opacity: 0.7;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    /* ── Modal ── */
+    dialog {
+      border-radius: 0.5rem;
+      max-width: 90vw;
+      max-height: 90vh;
+      width: 700px;
+      overflow-y: auto;
+    }
+
+    dialog::backdrop {
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .modal-poster {
+      width: 150px;
+      height: 225px;
+      flex-shrink: 0;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      background: var(--pico-form-element-background-color);
+    }
+
+    .modal-poster img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .modal-content {
+      flex: 1;
+    }
+
+    .modal-title {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.5rem;
+    }
+
+    .modal-meta {
+      display: flex;
+      gap: 1rem;
+      opacity: 0.7;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .modal-description {
+      line-height: 1.6;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+    }
+
+    .modal-description.truncated {
+      max-height: 100px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── TV Show Selectors ── */
+    .tv-section {
+      display: none;
+      margin-bottom: 1rem;
+    }
+
+    .tv-section.active {
+      display: block;
+    }
+
+    .selector-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .selector-group label {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .selector-group select,
+    .selector-group input {
+      width: 100%;
+    }
+
+    /* ── Episode List ── */
+    .episode-list {
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--pico-form-element-border-color);
+      border-radius: 0.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .episode-list.active {
+      display: block;
+    }
+
+    .episode-item {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--pico-form-element-border-color);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .episode-item:hover {
+      background: var(--mov-accent-light);
+    }
+
+    .episode-item.selected {
+      background: var(--mov-accent-light);
+      font-weight: 600;
+    }
+
+    /* ── Action Buttons ── */
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .modal-actions button {
+      flex: 1;
+    }
+
+    .modal-actions button:last-child {
+      background-color: #ddd;
+      color: #333;
+    }
+
+    /* ── Video Player ── */
+    #player-container {
+      display: none;
+      margin-bottom: 2rem;
+    }
+
+    #player-container.active {
+      display: block;
+    }
+
+    #video {
+      width: 100%;
+      height: auto;
+      background: #000;
+      border-radius: 0.5rem;
+    }
+
+    .player-controls {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .player-controls button {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    /* ── FAB Menu ── */
+    #fab-menu {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.5rem;
+    }
+
+    #fab-toggle {
+      --pico-color: var(--pico-form-element-color);
+      --pico-background-color: var(--pico-form-element-background-color);
+      --pico-border-color: var(--pico-form-element-border-color);
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      padding: 0;
+      transition: background 0.2s, transform 0.2s;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--pico-card-border-color);
+    }
+
+    #fab-toggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    #fab-items {
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    #fab-menu.open #fab-items {
+      display: flex;
+      animation: fab-reveal 0.2s ease;
+    }
+
+    @keyframes fab-reveal {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #fab-menu #fab-items button {
+      --pico-color: var(--pico-form-element-color);
+      --pico-background-color: var(--pico-form-element-background-color);
+      --pico-border-color: var(--pico-form-element-border-color);
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      padding: 0;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--pico-card-border-color);
+      position: relative;
+    }
+
+    #fab-menu #fab-items button:hover {
+      transform: scale(1.05);
+    }
+
+    #fab-menu #fab-items button::after {
+      content: attr(aria-label);
+      position: absolute;
+      right: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%) scale(0.9);
+      opacity: 0;
+      pointer-events: none;
+      background: var(--pico-color);
+      color: var(--pico-background-color);
+      padding: 0.4rem 0.8rem;
+      border-radius: 0.25rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: opacity 0.2s;
+    }
+
+    #fab-menu #fab-items button:hover::after {
+      opacity: 1;
+    }
+
+    /* ── Empty State ── */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      opacity: 0.6;
+    }
+
+    /* ── Responsive Design ── */
+    @media (max-width: 768px) {
+      #results {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      }
+
+      dialog {
+        width: 95vw;
+        max-height: 95vh;
+      }
+
+      .modal-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .modal-poster {
+        width: 120px;
+        height: 180px;
+      }
+
+      .modal-actions {
+        flex-direction: column;
+      }
+
+      #fab-menu {
+        bottom: 1rem;
+        right: 0.5rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <!-- Header -->
+    <header>
+      <h1>🎬 mov-web</h1>
+      <p class="subtitle">Stream movies & TV shows · Lightweight · No sign-up</p>
+    </header>
+
+    <!-- Search Section -->
+    <section class="search-section">
+      <input 
+        type="text" 
+        id="search-input" 
+        placeholder="Search movies, TV shows..."
+        autocomplete="off"
+      >
+      <button id="search-btn" aria-label="Search">
+        <i class="fas fa-search"></i>
+      </button>
+    </section>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="loading">
+      <i class="fas fa-spinner fa-spin"></i> Searching...
+    </div>
+
+    <!-- Results Grid -->
+    <section id="results"></section>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="empty-state" style="display: none;">
+      <p>Start typing to search for movies and TV shows</p>
+    </div>
+
+    <!-- Video Player -->
+    <section id="player-container">
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+        <button id="player-back" style="flex: 0 0 auto;">
+          <i class="fas fa-arrow-left"></i> Back
+        </button>
+        <h2 id="player-title" style="flex: 1; margin: 0; display: flex; align-items: center;"></h2>
+      </div>
+      <video 
+        id="video" 
+        controls 
+        style="width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 0.5rem;"
+      ></video>
+      <div class="player-controls">
+        <select id="quality-select">
+          <option value="">Quality</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+        <select id="subtitles-select">
+          <option value="">Subtitles</option>
+        </select>
+        <button id="fullscreen-btn">
+          <i class="fas fa-expand"></i> Fullscreen
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Media Details Modal -->
+  <dialog id="media-modal">
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+      <h2 id="modal-title" style="margin: 0;"></h2>
+      <button 
+        id="modal-close" 
+        style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0;"
+        aria-label="Close"
+      >
+        &times;
+      </button>
+    </div>
+
+    <div class="modal-header">
+      <div class="modal-poster">
+        <img id="modal-poster" alt="Poster" style="width: 100%; height: 100%; object-fit: cover;">
+      </div>
+      <div class="modal-content">
+        <h2 class="modal-title" id="media-title"></h2>
+        <div class="modal-meta">
+          <span id="media-year"></span>
+          <span id="media-type"></span>
+          <span id="media-rating"></span>
+        </div>
+        <div class="modal-description" id="media-description"></div>
+      </div>
+    </div>
+
+    <!-- TV Show Specific Section -->
+    <div class="tv-section" id="tv-section">
+      <div class="selector-group">
+        <label for="season-select">Season</label>
+        <select id="season-select"></select>
+      </div>
+      <div class="selector-group">
+        <label for="episode-select">Episode</label>
+        <div class="episode-list" id="episode-list"></div>
+      </div>
+    </div>
+
+    <!-- Server & Quality Selection -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+      <div class="selector-group">
+        <label for="server-select">Server</label>
+        <select id="server-select"></select>
+      </div>
+      <div class="selector-group">
+        <label for="quality-modal-select">Quality</label>
+        <select id="quality-modal-select">
+          <option value="1080">1080p (default)</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Subtitle Selection -->
+    <div class="selector-group">
+      <label for="subtitles-modal-select">Subtitles</label>
+      <select id="subtitles-modal-select"></select>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="modal-actions">
+      <button id="modal-play" style="background-color: var(--mov-accent); color: white;">
+        <i class="fas fa-play"></i> Play
+      </button>
+      <button id="modal-cancel">Cancel</button>
+    </div>
+  </dialog>
+
+  <!-- FAB Menu -->
+  <div id="fab-menu">
+    <button id="fab-toggle" aria-label="Menu">
+      <i class="fas fa-ellipsis-v"></i>
+    </button>
+    <div id="fab-items">
+      <button id="theme-toggle" aria-label="Toggle theme">
+        <i class="fas fa-moon"></i>
+      </button>
+      <button id="history-btn" aria-label="Watch history">
+        <i class="fas fa-history"></i>
+      </button>
+      <button id="favorites-btn" aria-label="Favorites">
+        <i class="fas fa-star"></i>
+      </button>
+      <button id="settings-btn" aria-label="Settings">
+        <i class="fas fa-cog"></i>
+      </button>
+      <button id="about-btn" aria-label="About">
+        <i class="fas fa-circle-info"></i>
+      </button>
+    </div>
+  </div>
+
+  <script src="/anilist.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "mov-web",
+  "version": "0.1.0",
+  "description": "Browser-based movie/TV streaming frontend for FlixHQ",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0"
+  }
+}
