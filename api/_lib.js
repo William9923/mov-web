@@ -191,7 +191,13 @@ function parseSearchHTML(html) {
     }
   }
 
-  return results
+  // Deduplicate by id (FlixHQ has duplicate links per card)
+  const seen = new Set()
+  return results.filter(item => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
 }
 
 /**
