@@ -16,12 +16,13 @@ function sendError(res, status, message) {
 
 function proxyUrl(req, res, url) {
   const isM3u8Url = url.includes('.m3u8')
+  const referer = req.headers.referer || req.headers.origin || 'https://mov-web-viewer.vercel.app'
 
   const upstreamReq = https.get(url, {
     headers: {
       'User-Agent': USER_AGENT,
-      'Referer': 'https://flixhq.to',
-      'Origin': 'https://flixhq.to'
+      'Referer': referer,
+      'Origin': referer
     }
   }, (upstreamRes) => {
     // Follow redirects
