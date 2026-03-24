@@ -402,7 +402,7 @@ function aesDecryptCryptoJS(encryptedB64, keyB64) {
 /**
  * Build the fake window environment needed by the Vidcloud/Megacloud WASM binary.
  * The WASM reads window.xrax, window.G, window.localStorage, window.performance,
- * window.location, window.crypto, the j_crt meta content, and a canvas fingerprint.
+ * window.location, window.crypto, the WASM seed meta content (j_crt or _gg_fb), and a canvas fingerprint.
  * After calling groot() + jwt_plugin(), it populates localStorage with kid/kversion/ktime
  * and sets window.pid.
  */
@@ -541,8 +541,9 @@ async function runWasm(wasmBytes, fakeEnv) {
     const ctx = { a, b, cnt: 1, dtor }
     const wrapper = (...args) => {
       ctx.cnt++
-      try { return fn(ctx.a, ctx.b, ...args) }
-      finally { if (--ctx.cnt === 0) { wasm.__wbindgen_export_2.get(ctx.dtor)(ctx.a, ctx.b); ctx.a = 0 } }
+      try {
+        return fn(ctx.a, ctx.b, ...args)
+      } finally { if (--ctx.cnt === 0) { wasm.__wbindgen_export_2.get(ctx.dtor)(ctx.a, ctx.b); ctx.a = 0 } }
     }
     wrapper.original = ctx
     return wrapper
@@ -609,7 +610,9 @@ async function runWasm(wasmBytes, fakeEnv) {
         return applyWin(function() { return addToArr(canvas) }, arguments)
       },
       __wbg_querySelector_118a0639aa1f51cd() {
-        return applyWin(function() { return addToArr(meta) }, arguments)
+        return applyWin(function(i, ptrS, lenS) {
+          return addToArr(meta)
+        }, arguments)
       },
       __wbg_querySelectorAll_50c79cd4f7573825() {
         return applyWin(function() { return addToArr(nodeList) }, arguments)
@@ -673,10 +676,18 @@ async function runWasm(wasmBytes, fakeEnv) {
         getDV().setInt32(off, ptr, true)
       },
       __wbg_get_8986951b1ee310e0(i, p, l) {
-        const v = get(i)[readStr(p, l)]; return v == null ? 0 : addToArr(v)
+        const key = readStr(p, l)
+        const v = get(i)[key]
+        return v == null ? 0 : addToArr(v)
       },
       __wbg_setTimeout_6ed7182ebad5d297() {
-        return applyWin(function() { return 7 }, arguments)
+        return applyWin(function() {
+          const cb = arguments[1] !== undefined ? get(arguments[1]) : null
+          if (typeof cb === 'function') {
+            setTimeout(() => { try { cb() } catch(e) {} }, 0)
+          }
+          return 7
+        }, arguments)
       },
       __wbg_self_05040bd9523805b9() { return applyWin(function() { return addToArr(fakeWindow) }, arguments) },
       __wbg_window_adc720039f2cb14f() { return applyWin(function() { return addToArr(fakeWindow) }, arguments) },
@@ -691,13 +702,19 @@ async function runWasm(wasmBytes, fakeEnv) {
         }, arguments)
       },
       __wbg_call_3f093dd26d5569f8() {
-        return applyWin(function(i, j) { return addToArr(get(i).call(get(j))) }, arguments)
+        return applyWin(function(i, j) {
+          return addToArr(get(i).call(get(j)))
+        }, arguments)
       },
       __wbg_call_67f2111acd2dfdb6() {
-        return applyWin(function(i, j, k) { return addToArr(get(i).call(get(j), get(k))) }, arguments)
+        return applyWin(function(i, j, k) {
+          return addToArr(get(i).call(get(j), get(k)))
+        }, arguments)
       },
       __wbg_set_961700853a212a39() {
-        return applyWin(function(i, j, k) { return Reflect.set(get(i), get(j), get(k)) }, arguments)
+        return applyWin(function(i, j, k) {
+          return Reflect.set(get(i), get(j), get(k))
+        }, arguments)
       },
       __wbg_buffer_b914fb8b50ebbc3e: i => addToArr(get(i).buffer),
       __wbg_newwithbyteoffsetandlength_0de9ee56e9f6ee6e: (i, a, b) => addToArr(new Uint8Array(get(i), a >>> 0, b >>> 0)),
@@ -720,20 +737,28 @@ async function runWasm(wasmBytes, fakeEnv) {
   const instance = new WebAssembly.Instance(mod, imports)
   wasm = instance.exports
 
-  // Boot sequence: groot() initialises the WASM, then jwt_plugin() runs the fingerprint
+  // Boot sequence:
+  // 1. Pre-set fakeWindow.navigate as a Promise resolver — groot() reads and stores it internally.
+  // 2. groot() initialises the WASM and registers the navigate callback.
+  // 3. jwt_plugin(wasmBytes) runs the fingerprint, calls fakeWindow.navigate(q5buf),
+  //    and populates fakeLocalStorage with pid/kversion/kid.
+  let resolveQ5, rejectQ5
+  const q5Promise = new Promise((res, rej) => { resolveQ5 = res; rejectQ5 = rej })
+  fakeWindow.navigate = async (buf) => { resolveQ5(buf); return buf }
+
   wasm.groot()
   fakeWindow.jwt_plugin(wasmBytes)
 
-  // navigate() returns the Q5 key material as an ArrayBuffer
-  const q5 = await fakeWindow.navigate()
-  return new Uint8Array(q5)
+  const q5Result = await q5Promise
+
+  return new Uint8Array(q5Result)
 }
 
 /**
  * Self-hosted decryption for Vidcloud/Megacloud embeds.
  *
  * Flow:
- *   1. Fetch embed page → extract j_crt meta content
+ *   1. Fetch embed page → extract WASM seed meta tag (j_crt on megacloud, _gg_fb on others)
  *   2. Fetch WASM binary (loading.png) + pixel image (image.png)
  *   3. Run WASM in fake window → get pid, kversion, kid from fakeLocalStorage
  *   4. Call getSources API
@@ -755,14 +780,36 @@ async function decryptEmbed(embedLink) {
 
   const embedHeaders = {
     'User-Agent': USER_AGENT,
-    'Referer': embedLink,
+    'Referer': FLIXHQ_BASE,
   }
 
-  // 1. Fetch embed page HTML and extract j_crt meta content
-  const embedHtml = await httpsGet(embedLink, { ...embedHeaders, 'X-Requested-With': 'XMLHttpRequest' }, 15000)
-  const jCrtMatch = embedHtml.match(/name="j_crt"\s+content="([A-Za-z0-9+/=]+)"/)
-  if (!jCrtMatch) throw new Error('j_crt meta tag not found in embed page')
-  const jCrtContent = jCrtMatch[1] + '=='
+  // 1. Fetch embed page HTML and extract the WASM seed value.
+  //    Different embed hosts (and even the same host over time) use different containers:
+  //    - megacloud.tv / rabbitstream.net → <meta name="j_crt" content="...">
+  //    - streameeeeee.site (older)       → <meta name="_gg_fb" content="...">
+  //    - streameeeeee.site (newer)       → <div data-dpi="..." style="display:none">
+  //    Note: do NOT send X-Requested-With here — some hosts suppress the seed when it's present.
+  const embedHtml = await httpsGet(embedLink, embedHeaders, 15000)
+
+  // Try each known seed container in priority order.
+  // The server rotates the seed location on each request — all produce a ~48-char base64url value.
+  const seedPatterns = [
+    /name="(?:j_crt|_gg_fb)"\s+content="([A-Za-z0-9+/=]+)"/,
+    /data-dpi="([A-Za-z0-9+/=]+)"/,
+    /<!--\s*[\w-]+:([A-Za-z0-9+/=]+)\s*-->/,
+    /<script\s+nonce="([A-Za-z0-9+/=]{40,})"[^>]*>\/\*\s*empty/,
+  ]
+  let jCrtContent = null
+  for (const pattern of seedPatterns) {
+    const m = embedHtml.match(pattern)
+    if (m) { jCrtContent = m[1] + '=='; break }
+  }
+  // _lk_db pattern: three 16-char chunks split into x/y/z fields
+  if (!jCrtContent) {
+    const lk = embedHtml.match(/window\._lk_db\s*=\s*\{x:\s*"([^"]+)",\s*y:\s*"([^"]+)",\s*z:\s*"([^"]+)"\}/)
+    if (lk) jCrtContent = lk[1] + lk[2] + lk[3] + '=='
+  }
+  if (!jCrtContent) throw new Error('WASM seed not found in embed page (tried meta[j_crt/_gg_fb], data-dpi, html-comment, nonce, _lk_db)')
 
   const dateNow = Date.now()
 
