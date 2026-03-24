@@ -428,100 +428,45 @@ async function handleEpisodes(req, res, seasonId) {
 }
 
 /**
- * GET /api/resolve?mediaId=<numeric_id>&dataId=<data_id>&type=movie|tv
+ * GET /api/resolve?type=movie|tv&title=<title>&season=<n>&episode=<n>
  */
-async function handleResolve(req, res, mediaId, dataId, type) {
+async function handleResolve(req, res, type, title, season, episode) {
   try {
-    if (!mediaId || !type) {
-      return sendJSON(res, 400, { error: 'Missing mediaId or type' })
+    if (!type || !title) {
+      return sendJSON(res, 400, { error: 'Missing type or title' })
     }
 
-    log('[Resolve]', `${type}:${mediaId}`)
-
-    let episodeId = null
-    let embedLink = null
-
-    try {
-      // For TV: get servers, pick first Vidcloud/available, get episode_id
-      if (type === 'tv' && dataId) {
-        const serversUrl = `${FLIXHQ_BASE}/ajax/v2/episode/servers/${dataId}`
-        const serversHtml = await httpsGet(serversUrl, AJAX_HEADERS, 10000)
-
-        const servers = parseServersHTML(serversHtml)
-        log(`[Resolve] Found ${servers.length} servers`)
-
-        // Pick first "Vidcloud" or first available
-        const server = servers.find((s) => s.name.toLowerCase().includes('vidcloud')) || servers[0]
-        if (server) {
-          episodeId = server.id
-        }
-      }
-      // For movies: get episode_id directly from media_id
-      else if (type === 'movie') {
-        const episodesUrl = `${FLIXHQ_BASE}/ajax/movie/episodes/${mediaId}`
-        const episodesHtml = await httpsGet(episodesUrl, AJAX_HEADERS, 10000)
-
-        // Movie endpoint returns a server list with data-linkid attributes
-        // e.g. <a id="watch-5361022" data-linkid="5361022" ... title="Vidcloud">
-        const serverRegex = /data-linkid="([^"]+)"[^>]*title="([^"]+)"/g
-        const servers = []
-        let m
-        while ((m = serverRegex.exec(episodesHtml)) !== null) {
-          servers.push({ id: m[1], name: m[2] })
-        }
-
-        // Prefer Vidcloud, else first available
-        const server = servers.find(s => s.name.toLowerCase().includes('vidcloud')) || servers[0]
-        if (server) {
-          episodeId = server.id
-        }
-        log(`[Resolve] Movie servers found: ${servers.length}, using: ${server?.name}`)
-      }
-
-      if (!episodeId) {
-        throw new Error('No episode ID found')
-      }
-
-      // Get embed link from sources
-      const sourcesUrl = `${FLIXHQ_BASE}/ajax/episode/sources/${episodeId}`
-      const sourcesJson = await httpsGet(sourcesUrl, AJAX_HEADERS, 10000)
-
-      embedLink = parseEmbedJSON(sourcesJson)
-      if (!embedLink) {
-        throw new Error('No embed link found')
-      }
-    } catch (e) {
-      log('[Resolve] Sources error:', e.message)
-      throw e
+    const token = process.env.TMDB_READ_TOKEN
+    if (!token) {
+      return sendJSON(res, 500, { error: 'TMDB_READ_TOKEN not configured' })
     }
 
-    // Decrypt embed
-    try {
-      const decrypted = await decryptEmbed(embedLink, mediaId)
+    log('[Resolve]', `${type}: "${title}"`)
 
-      // Handle both response shapes:
-      // broggl.farm: { sources: [{file}], tracks: [{file, label}] }
-      // eatmynerds:  { file, subtitles: [{file, label}] }
-      const m3u8Url =
-        decrypted.file ||
-        (Array.isArray(decrypted.sources) && decrypted.sources[0]?.file) ||
-        ''
+    // Search TMDB for the TMDB ID
+    const endpoint = type === 'tv' ? 'search/tv' : 'search/movie'
+    const tmdbUrl = `https://api.themoviedb.org/3/${endpoint}?query=${encodeURIComponent(title)}&page=1`
+    const tmdbRaw = await httpsGet(tmdbUrl, { 'Authorization': `Bearer ${token}` }, 10000)
+    const tmdbData = JSON.parse(tmdbRaw)
+    const tmdbResult = tmdbData.results?.[0]
 
-      const subtitles =
-        decrypted.subtitles ||
-        decrypted.tracks ||
-        []
-
-      const result = {
-        sources: [{ url: m3u8Url, hls: true }],
-        subtitles
-      }
-
-      sendJSON(res, 200, result)
-    } catch (decryptError) {
-      log('[Resolve] Decrypt error:', decryptError.message)
-      sendJSON(res, 500, { error: 'Decryption failed: ' + decryptError.message })
+    if (!tmdbResult?.id) {
+      return sendJSON(res, 404, { error: 'No TMDB results found' })
     }
+
+    // Build vsembed URL
+    let embedUrl
+    if (type === 'tv') {
+      if (!season || !episode) {
+        return sendJSON(res, 400, { error: 'Missing season or episode for TV' })
+      }
+      embedUrl = `https://vsembed.su/embed/tv/${tmdbResult.id}/${season}/${episode}`
+    } else {
+      embedUrl = `https://vsembed.su/embed/movie/${tmdbResult.id}`
+    }
+
+    log('[Resolve] embedUrl:', embedUrl)
+    sendJSON(res, 200, { embedUrl })
   } catch (e) {
     log('[Resolve] Error:', e.message)
     sendJSON(res, 500, { error: e.message })
@@ -704,10 +649,11 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === '/api/resolve') {
-    const mediaId = searchParams.get('mediaId')
-    const dataId = searchParams.get('dataId')
     const type = searchParams.get('type')
-    return handleResolve(req, res, mediaId, dataId, type)
+    const title = searchParams.get('title')
+    const season = searchParams.get('season')
+    const episode = searchParams.get('episode')
+    return handleResolve(req, res, type, title, season, episode)
   }
 
   if (pathname === '/api/proxy') {

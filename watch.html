@@ -10,8 +10,7 @@
   <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css"></noscript>
 
-  <!-- HLS.js -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
 
   <!-- Dynamic Favicon -->
   <script>
@@ -131,69 +130,10 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
-    video {
-      width: 100%;
-      display: block;
-      background: #000;
-    }
+
 
     /* ── Controls Below Video ── */
-    .player-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      background: var(--pico-card-background-color);
-      padding: 1rem;
-      border-radius: 8px;
-      margin-bottom: 1.5rem;
-    }
-
-    /* Quality Bar */
-    .quality-bar-label {
-      font-size: 0.875rem;
-      font-weight: 500;
-      opacity: 0.8;
-    }
-
-    #quality-bar {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .quality-btn {
-      padding: 0.4rem 0.8rem;
-      font-size: 0.875rem;
-      border: 1px solid var(--pico-form-element-border-color);
-      background: var(--pico-form-element-background-color);
-      color: var(--pico-form-element-color);
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-
-    .quality-btn:hover {
-      border-color: var(--mov-accent);
-      color: var(--mov-accent);
-    }
-
-    .quality-btn.active {
-      background: var(--mov-accent);
-      border-color: var(--mov-accent);
-      color: white;
-    }
-
-    /* Subtitle Selector */
-    .subtitle-label {
-      font-size: 0.875rem;
-      font-weight: 500;
-      opacity: 0.8;
-    }
-
-    #subtitle-select {
-      max-width: 300px;
-    }
+    /* Removed - player-controls no longer needed for iframe */
 
     /* ── Episode Pills ── */
     .episodes-scroller {
@@ -372,16 +312,6 @@
         flex-wrap: wrap;
       }
 
-      .quality-btn {
-        padding: 0.3rem 0.6rem;
-        font-size: 0.75rem;
-      }
-
-      .player-controls {
-        padding: 0.75rem;
-        gap: 0.75rem;
-      }
-
       .control-group {
         flex-direction: column;
         align-items: flex-start;
@@ -389,11 +319,6 @@
 
       #season-select {
         width: 100%;
-      }
-
-      #subtitle-select {
-        width: 100%;
-        max-width: none;
       }
 
       #error-message {
@@ -425,16 +350,6 @@
         min-width: 34px;
         height: 34px;
         font-size: 0.8rem;
-      }
-
-      .quality-btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.7rem;
-      }
-
-      .player-controls {
-        padding: 0.5rem;
-        gap: 0.5rem;
       }
 
       .video-container {
@@ -513,23 +428,10 @@
 
     <!-- Video Player -->
     <div class="video-container" id="video-container" style="display:none">
-      <video id="video" controls></video>
+      <iframe id="embed-iframe" allowfullscreen allow="autoplay; fullscreen" referrerpolicy="origin" style="width:100%;aspect-ratio:16/9;border:none;display:block"></iframe>
     </div>
 
-    <!-- Player Controls -->
-    <div class="player-controls" id="player-controls" style="display:none">
-      <!-- Quality Selection -->
-      <div>
-        <p class="quality-bar-label">Quality</p>
-        <div id="quality-bar"></div>
-      </div>
 
-      <!-- Subtitle Selection -->
-      <div>
-        <label for="subtitle-select" class="subtitle-label">Subtitles:</label>
-        <select id="subtitle-select"></select>
-      </div>
-    </div>
   </main>
 
   <!-- Loading Overlay -->
@@ -551,11 +453,11 @@
       GitHub
     </a>
     <span class="footer-dot">·</span>
-    <a href="https://flixhq.to" target="_blank" rel="noopener">
+    <a href="https://vsembed.su" target="_blank" rel="noopener">
       <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-        <path d="M0 1a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V1zm4 0v6h8V1H4zm8 8H4v6h8V9zM1 1v2h2V1H1zm2 3H1v2h2V4zM1 7v2h2V7H1zm2 3H1v2h2v-2zm-2 3v2h2v-2H1zM15 1h-2v2h2V1zm-2 3v2h2V4h-2zm2 3h-2v2h2V7zm-2 3v2h2v-2h-2zm2 3h-2v2h2v-2z"/>
+        <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 010 1.393z"/>
       </svg>
-      FlixHQ
+      vsembed
     </a>
   </footer>
 </body>

@@ -1,6 +1,6 @@
 /**
  * mov-web Watch Page Logic
- * Handles HLS video streaming, episode/season management, quality selection, subtitles
+ * Handles iframe video streaming, episode/season management
  */
 
 // ============================================================================
@@ -9,11 +9,6 @@
 
 const HISTORY_KEY = 'mov-web-history'
 const WATCHED_EPISODES_KEY = 'mov-web-watched-episodes'
-
-let currentHls = null
-let currentMediaId = null
-let currentDataId = null
-let currentType = null
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -27,13 +22,6 @@ let currentType = null
 function getNumericId(slugId) {
   const match = slugId.match(/(\d+)$/)
   return match ? match[1] : null
-}
-
-/**
- * Wrap URL in /api/proxy for CORS bypass
- */
-function proxyUrl(url) {
-  return '/api/proxy?url=' + encodeURIComponent(url)
 }
 
 /**
@@ -137,228 +125,40 @@ function showError(message) {
 }
 
 // ============================================================================
-// HLS & VIDEO PLAYER SETUP
-// ============================================================================
-
-/**
- * Setup HLS player with quality selection and subtitles
- */
-function setupHls(m3u8Url, video, subtitles = []) {
-  return new Promise((resolve, reject) => {
-    try {
-      // Destroy previous HLS instance
-      if (currentHls) {
-        currentHls.destroy()
-      }
-
-      if (!Hls.isSupported()) {
-        showError('HLS is not supported by your browser')
-        reject(new Error('HLS not supported'))
-        return
-      }
-
-      const hls = new Hls({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 90,
-        autoStartLoad: true
-      })
-
-      const proxiedUrl = proxyUrl(m3u8Url)
-      console.log('[setupHls] loading proxied URL:', proxiedUrl.slice(0, 100))
-      hls.loadSource(proxiedUrl)
-      hls.attachMedia(video)
-
-      currentHls = hls
-
-      // Hard timeout — if manifest never parses within 20s, give up
-      const timeout = setTimeout(() => {
-        console.error('[setupHls] manifest parse timeout')
-        hls.destroy()
-        reject(new Error('Timed out waiting for stream manifest'))
-      }, 20000)
-
-      // When manifest is parsed, setup quality levels
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        clearTimeout(timeout)
-        // Reveal player + controls on first load
-        const vc = document.getElementById('video-container')
-        const pc = document.getElementById('player-controls')
-        if (vc) vc.style.display = ''
-        if (pc) pc.style.display = ''
-        renderQualityBar(hls.levels)
-        renderSubtitleSelector(subtitles, video)
-        video.play()
-        hideLoading()
-        resolve(hls)
-      })
-
-      // Handle quality switch
-      hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-        updateQualityButtonStyles()
-      })
-
-      // Handle errors
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.warn('HLS error:', data.type, data.details, 'fatal:', data.fatal)
-        if (data.fatal) {
-          console.error('Fatal HLS error:', data)
-          clearTimeout(timeout)
-          showError('Playback error: ' + data.details)
-          hideLoading()
-          hls.destroy()
-          reject(new Error('HLS error: ' + data.details))
-        }
-      })
-
-    } catch (error) {
-      console.error('HLS setup error:', error)
-      showError('Failed to setup video player')
-      reject(error)
-    }
-  })
-}
-
-/**
- * Render quality selection buttons
- */
-function renderQualityBar(levels) {
-  const qualityBar = document.getElementById('quality-bar')
-  if (!qualityBar) return
-
-  qualityBar.innerHTML = ''
-
-  // Auto button
-  const autoBtn = document.createElement('button')
-  autoBtn.textContent = 'Auto'
-  autoBtn.className = 'quality-btn'
-  autoBtn.id = 'quality-auto'
-  autoBtn.onclick = () => {
-    currentHls.currentLevel = -1
-    updateQualityButtonStyles()
-  }
-  qualityBar.appendChild(autoBtn)
-
-  // Per-level buttons
-  levels.forEach((level, index) => {
-    const btn = document.createElement('button')
-    btn.textContent = `${level.height}p`
-    btn.className = 'quality-btn'
-    btn.id = `quality-${index}`
-    btn.onclick = () => {
-      currentHls.currentLevel = index
-      updateQualityButtonStyles()
-    }
-    qualityBar.appendChild(btn)
-  })
-
-  updateQualityButtonStyles()
-}
-
-/**
- * Update quality button active states
- */
-function updateQualityButtonStyles() {
-  if (!currentHls) return
-
-  const buttons = document.querySelectorAll('.quality-btn')
-  buttons.forEach(btn => btn.classList.remove('active'))
-
-  if (currentHls.currentLevel === -1) {
-    const autoBtn = document.getElementById('quality-auto')
-    if (autoBtn) autoBtn.classList.add('active')
-  } else {
-    const levelBtn = document.getElementById(`quality-${currentHls.currentLevel}`)
-    if (levelBtn) levelBtn.classList.add('active')
-  }
-}
-
-/**
- * Render subtitle selector
- */
-function renderSubtitleSelector(subtitles, video) {
-  const subtitleSelect = document.getElementById('subtitle-select')
-  if (!subtitleSelect) return
-
-  subtitleSelect.innerHTML = '<option value="">No Subtitles</option>'
-
-  subtitles.forEach((sub, index) => {
-    const option = document.createElement('option')
-    option.value = index
-    option.textContent = sub.label || `Subtitle ${index + 1}`
-    subtitleSelect.appendChild(option)
-  })
-
-  subtitleSelect.onchange = (e) => {
-    // Remove existing tracks
-    Array.from(video.querySelectorAll('track')).forEach(t => t.remove())
-
-    if (e.target.value !== '') {
-      const subIndex = parseInt(e.target.value)
-      const sub = subtitles[subIndex]
-
-      const track = document.createElement('track')
-      track.kind = 'subtitles'
-      track.src = sub.file
-      track.label = sub.label || `Subtitle ${subIndex + 1}`
-      track.default = true
-      video.appendChild(track)
-    }
-  }
-}
-
-// ============================================================================
 // API CALLS
 // ============================================================================
 
 /**
  * Load and play an episode or movie
  */
-async function resolveAndPlay(mediaId, dataId, type) {
+async function resolveAndPlay(mediaId, dataId, type, season, episode) {
   showLoading()
   try {
-    const url = `/api/resolve?mediaId=${mediaId}&dataId=${dataId}&type=${type}`
-    console.log('[resolveAndPlay] fetching:', url)
+    const params = new URLSearchParams({ mediaId, dataId, type })
+    // pass title from page, season+episode if TV
+    const titleEl = document.getElementById('title')
+    if (titleEl?.textContent) params.set('title', titleEl.textContent)
+    if (season) params.set('season', season)
+    if (episode) params.set('episode', episode)
 
-    const response = await fetch(url)
+    const response = await fetch('/api/resolve?' + params)
     const data = await response.json()
-    console.log('[resolveAndPlay] response:', data)
 
-    if (!response.ok) {
-      throw new Error(data.error || `API error: ${response.status}`)
-    }
+    if (!response.ok) throw new Error(data.error || `API error ${response.status}`)
+    if (!data.embedUrl) throw new Error('No embed URL returned')
 
-    if (!data.sources || !data.sources.length) {
-      throw new Error('No video sources available')
-    }
+    const iframe = document.getElementById('embed-iframe')
+    iframe.src = data.embedUrl
 
-    // Find HLS source (or use first source)
-    const source = data.sources.find(s => s.hls) || data.sources[0]
-    const m3u8Url = source.url
+    const vc = document.getElementById('video-container')
+    if (vc) vc.style.display = ''
 
-    if (!m3u8Url) {
-      throw new Error('Empty stream URL returned from resolve')
-    }
-
-    console.log('[resolveAndPlay] m3u8Url:', m3u8Url.slice(0, 80))
-
-    currentMediaId = mediaId
-    currentDataId = dataId
-    currentType = type
-
-    // Setup video player
-    const video = document.getElementById('video')
-    await setupHls(m3u8Url, video, data.subtitles || [])
-
-    // Mark as watched and save to history
+    hideLoading()
     markEpisodeWatched(mediaId, dataId)
-    const title = document.getElementById('title')?.textContent || 'Unknown'
-    saveToHistory(mediaId, type, title)
+    saveToHistory(mediaId, type, titleEl?.textContent || 'Unknown')
 
-    // Update UI if showing episodes (mark watched)
     const episodeBtn = document.getElementById(`episode-${dataId}`)
-    if (episodeBtn) {
-      episodeBtn.classList.add('watched')
-    }
+    if (episodeBtn) episodeBtn.classList.add('watched')
 
   } catch (error) {
     console.error('[resolveAndPlay] error:', error)
@@ -446,7 +246,12 @@ async function loadEpisodes(seasonId, mediaId) {
           .forEach(p => p.classList.remove('active'))
         btn.classList.add('active')
         btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
-        resolveAndPlay(mediaId, episode.id, 'tv')
+        
+        // Extract season number from selected season option text
+        const seasonText = document.getElementById('season-select')?.selectedOptions[0]?.textContent || ''
+        const seasonNum = parseInt(seasonText.match(/\d+/)?.[0]) || 1
+        
+        resolveAndPlay(mediaId, episode.id, 'tv', seasonNum, index + 1)
       }
 
       episodeList.appendChild(btn)
@@ -456,55 +261,6 @@ async function loadEpisodes(seasonId, mediaId) {
     console.error('Load episodes error:', error)
     showError('Failed to load episodes: ' + error.message)
   }
-}
-
-// ============================================================================
-// KEYBOARD SHORTCUTS
-// ============================================================================
-
-/**
- * Setup keyboard shortcuts
- */
-function setupKeyboardShortcuts(video) {
-  document.addEventListener('keydown', (e) => {
-    if (!video) return
-
-    // Don't interfere with form inputs
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
-      return
-    }
-
-    switch (e.code) {
-      case 'Space':
-        e.preventDefault()
-        video.paused ? video.play() : video.pause()
-        break
-
-      case 'ArrowRight':
-        e.preventDefault()
-        video.currentTime = Math.min(video.currentTime + 10, video.duration)
-        break
-
-      case 'ArrowLeft':
-        e.preventDefault()
-        video.currentTime = Math.max(video.currentTime - 10, 0)
-        break
-
-      case 'KeyM':
-        e.preventDefault()
-        video.muted = !video.muted
-        break
-
-      case 'KeyF':
-        e.preventDefault()
-        if (document.fullscreenElement) {
-          document.exitFullscreen()
-        } else {
-          video.requestFullscreen()
-        }
-        break
-    }
-  })
 }
 
 // ============================================================================
@@ -533,12 +289,6 @@ async function initPage() {
   if (!numericId) {
     showError('Invalid media ID')
     return
-  }
-
-  // Setup keyboard shortcuts
-  const video = document.getElementById('video')
-  if (video) {
-    setupKeyboardShortcuts(video)
   }
 
   // Load based on type
