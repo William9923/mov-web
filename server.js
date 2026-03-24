@@ -454,15 +454,15 @@ async function handleResolve(req, res, type, title, season, episode) {
       return sendJSON(res, 404, { error: 'No TMDB results found' })
     }
 
-    // Build vidsrc embed URL
+    // Build moviesapi embed URL
     let embedUrl
     if (type === 'tv') {
       if (!season || !episode) {
         return sendJSON(res, 400, { error: 'Missing season or episode for TV' })
       }
-      embedUrl = `https://vidsrc.net/embed/tv?tmdb=${tmdbResult.id}&season=${season}&episode=${episode}`
+      embedUrl = `https://moviesapi.to/tv/${tmdbResult.id}-${season}-${episode}`
     } else {
-      embedUrl = `https://vidsrc.net/embed/movie?tmdb=${tmdbResult.id}`
+      embedUrl = `https://moviesapi.to/movie/${tmdbResult.id}`
     }
 
     log('[Resolve] embedUrl:', embedUrl)

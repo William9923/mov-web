@@ -47,16 +47,16 @@ module.exports = async function handler(req, res) {
       return res.end(JSON.stringify({ error: 'No TMDB results found' }))
     }
 
-    // Build vidsrc embed URL
+    // Build moviesapi embed URL
     let embedUrl
     if (type === 'tv') {
       if (!season || !episode) {
         res.writeHead(400, { ...CORS_HEADERS, 'Content-Type': 'application/json' })
         return res.end(JSON.stringify({ error: 'Missing season or episode for TV' }))
       }
-      embedUrl = `https://vidsrc.net/embed/tv?tmdb=${result.id}&season=${season}&episode=${episode}`
+      embedUrl = `https://moviesapi.to/tv/${result.id}-${season}-${episode}`
     } else {
-      embedUrl = `https://vidsrc.net/embed/movie?tmdb=${result.id}`
+      embedUrl = `https://moviesapi.to/movie/${result.id}`
     }
 
     res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': 'application/json' })
