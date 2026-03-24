@@ -317,6 +317,9 @@ function rewriteM3u8(content, originalUrl) {
 // WASM DECRYPTION HELPERS
 // ============================================================================
 
+// In-process cache for the WASM binary — keyed by URL, survives warm Vercel invocations.
+const wasmCache = new Map()
+
 /**
  * Fetch binary data (WASM/image) via HTTPS, returned as Buffer
  */
@@ -783,16 +786,28 @@ async function decryptEmbed(embedLink) {
     'Referer': FLIXHQ_BASE,
   }
 
-  // 1. Fetch embed page HTML and extract the WASM seed value.
-  //    Different embed hosts (and even the same host over time) use different containers:
+  // 1. Fetch embed page HTML and WASM binary + image in parallel.
+  //    The WASM URL is deterministic from the base URL, so we don't need the HTML first.
+  const wasmUrl = `${baseUrl}/images/loading.png?v=0.0.9`
+  const imgUrl  = `${baseUrl}/images/image.png?v=0.0.9`
+
+  const wasmFetch = wasmCache.has(wasmUrl)
+    ? Promise.resolve(wasmCache.get(wasmUrl))
+    : httpsBinary(wasmUrl, embedHeaders, 15000).then(buf => { wasmCache.set(wasmUrl, buf); return buf })
+
+  const [embedHtml, wasmBytes] = await Promise.all([
+    httpsGet(embedLink, embedHeaders, 15000),
+    wasmFetch,
+    httpsBinary(imgUrl, embedHeaders, 15000),   // image fetched in parallel; result unused (zeroed canvas)
+  ])
+
+  // 2. Extract the WASM seed from the embed page HTML.
+  //    The server rotates the seed location on each request — all produce a ~48-char base64url value.
+  //    Different embed hosts use different containers:
   //    - megacloud.tv / rabbitstream.net → <meta name="j_crt" content="...">
   //    - streameeeeee.site (older)       → <meta name="_gg_fb" content="...">
-  //    - streameeeeee.site (newer)       → <div data-dpi="..." style="display:none">
-  //    Note: do NOT send X-Requested-With here — some hosts suppress the seed when it's present.
-  const embedHtml = await httpsGet(embedLink, embedHeaders, 15000)
-
-  // Try each known seed container in priority order.
-  // The server rotates the seed location on each request — all produce a ~48-char base64url value.
+  //    - streameeeeee.site (newer)       → <div data-dpi="...">, html comment, nonce, _lk_db
+  //    Note: do NOT send X-Requested-With — some hosts suppress the seed when it's present.
   const seedPatterns = [
     /name="(?:j_crt|_gg_fb)"\s+content="([A-Za-z0-9+/=]+)"/,
     /data-dpi="([A-Za-z0-9+/=]+)"/,
@@ -812,19 +827,6 @@ async function decryptEmbed(embedLink) {
   if (!jCrtContent) throw new Error('WASM seed not found in embed page (tried meta[j_crt/_gg_fb], data-dpi, html-comment, nonce, _lk_db)')
 
   const dateNow = Date.now()
-
-  // 2. Fetch WASM binary and pixel data image in parallel
-  const wasmUrl = `${baseUrl}/images/loading.png?v=0.0.9`
-  const imgUrl = `${baseUrl}/images/image.png?v=0.0.9`
-
-  const [wasmBytes, imgBytes] = await Promise.all([
-    httpsBinary(wasmUrl, embedHeaders, 15000),
-    httpsBinary(imgUrl, embedHeaders, 15000),
-  ])
-
-  // Decode the image into raw RGBA pixels (the WASM uses it for canvas fingerprinting)
-  // We pass a fixed-size dummy buffer — the WASM XORs the pixel data for fingerprint only,
-  // the actual decryption key comes from the WASM output, not the pixels.
   const imageData = {
     width: 65,
     height: 50,
